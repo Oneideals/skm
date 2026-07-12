@@ -40,7 +40,17 @@ skm rollback <tool>                     # 回滚到上次切换前
 skm list                                # 各工具当前场景 + 启用的 skill
 skm packs / skm scenarios               # 列所有集合 / 场景
 skm doctor                              # 断链、孤儿链、缺失 skill 检查
+skm panel                               # 打开可视化配置面板(拖拽把 skill 组织进场景)
 ```
+
+## 可视化面板
+
+```bash
+skm panel                 # 浏览器打开 http://127.0.0.1:8787,拖 skill 进场景桶,保存写回 config.toml
+skm panel --port 9000 --no-open
+```
+
+左边是全部 skill(可搜索、带描述),右边是 base 和各场景桶;拖进去、点 ✕ 移除,顶部显示四工具当前场景。保存后 `skm use <工具> <场景>` 并重启工具生效。
 
 ## 配置 `~/.skm/config.toml`
 
