@@ -1,10 +1,15 @@
 """配置面板:SKILL.md 描述解析、状态构建、保存校验。HTTP 服务见文件末尾。"""
 from __future__ import annotations
 
+import json
 import re
+import socketserver
+import webbrowser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from .config import (ID_RE, Config, Scenario, missing_in_repo, save_config)
+from .config import (ID_RE, Config, Scenario, load_config, missing_in_repo,
+                     save_config)
 from .paths import Paths
 from .state import load_state
 
@@ -96,3 +101,83 @@ def apply_payload(paths: Paths, cfg: Config, payload: dict) -> None:
     cfg.base = base
     cfg.scenarios = new_scenarios
     save_config(paths, cfg)
+
+
+_HTML = Path(__file__).parent / "panel.html"
+
+
+class _Server(ThreadingHTTPServer):
+    """ThreadingHTTPServer 会在 server_bind 里调 socket.getfqdn 做反向 DNS,
+    某些网络下会卡数十秒。这里跳过它,直接用 host 当 server_name。"""
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name = host
+        self.server_port = port
+
+
+def _make_handler(paths: Paths):
+    html = _HTML.read_text(encoding="utf-8")
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *a):  # 静默日志
+            pass
+
+        def address_string(self):  # 跳过反向 DNS(否则每请求卡数秒)
+            return self.client_address[0]
+
+        def _send(self, code: int, body: str, ctype: str) -> None:
+            data = body.encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_GET(self):
+            if self.path == "/" or self.path.startswith("/index"):
+                self._send(200, html, "text/html; charset=utf-8")
+            elif self.path == "/api/state":
+                cfg = load_config(paths)
+                self._send(200, json.dumps(build_state(paths, cfg), ensure_ascii=False),
+                           "application/json; charset=utf-8")
+            else:
+                self._send(404, json.dumps({"error": "not found"}), "application/json")
+
+        def do_POST(self):
+            if self.path != "/api/save":
+                self._send(404, json.dumps({"error": "not found"}), "application/json")
+                return
+            length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(length)
+            try:
+                payload = json.loads(raw)
+                cfg = load_config(paths)
+                apply_payload(paths, cfg, payload)
+                self._send(200, json.dumps({"ok": True}), "application/json")
+            except (PanelError, ValueError) as e:
+                self._send(400, json.dumps({"error": str(e)}, ensure_ascii=False),
+                           "application/json; charset=utf-8")
+
+    return Handler
+
+
+def make_server(paths: Paths, port: int = 8787) -> ThreadingHTTPServer:
+    paths.ensure()
+    return _Server(("127.0.0.1", port), _make_handler(paths))
+
+
+def serve(paths: Paths, port: int = 8787, open_browser: bool = True) -> None:
+    httpd = make_server(paths, port)
+    actual = httpd.server_address[1]
+    url = f"http://127.0.0.1:{actual}/"
+    print(f"skm 配置面板: {url}  (Ctrl-C 停止)")
+    if open_browser:
+        webbrowser.open(url)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\n已停止")
+    finally:
+        httpd.server_close()
