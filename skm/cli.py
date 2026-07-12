@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from . import importer, linker, switcher
+from . import panel as _panel
 from .config import (ID_RE, Config, ConfigError, Pack, load_config,
                      missing_in_repo, save_config)
 from .paths import Paths
@@ -167,6 +168,11 @@ def _cmd_doctor(paths: Paths, cfg: Config, args) -> int:
     return 1
 
 
+def _cmd_panel(paths: Paths, cfg: Config, args) -> int:
+    _panel.serve(paths, port=args.port, open_browser=not args.no_open)
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="skm", description="跨工具 skill 管理器")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -213,6 +219,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p.set_defaults(fn=_cmd_upgrade)
 
     sub.add_parser("doctor", help="健康检查").set_defaults(fn=_cmd_doctor)
+
+    p = sub.add_parser("panel", help="打开可视化配置面板")
+    p.add_argument("--port", type=int, default=8787)
+    p.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
+    p.set_defaults(fn=_cmd_panel)
     return ap
 
 
