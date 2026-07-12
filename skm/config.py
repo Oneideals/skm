@@ -32,6 +32,7 @@ class Pack:
 @dataclass
 class Scenario:
     packs: list[str] = field(default_factory=list)
+    skills: list[str] = field(default_factory=list)
     label: str | None = None
 
 
@@ -71,7 +72,9 @@ def load_config(paths: Paths) -> Config:
     scenarios: dict[str, Scenario] = {}
     for name, body in raw.get("scenarios", {}).items():
         _check_id("scenario", name)
-        scenarios[name] = Scenario(packs=list(body.get("packs", [])), label=body.get("label"))
+        scenarios[name] = Scenario(packs=list(body.get("packs", [])),
+                                   skills=list(body.get("skills", [])),
+                                   label=body.get("label"))
     cfg = Config(tools=tools, base=base, packs=packs, scenarios=scenarios)
     _validate_refs(cfg)
     return cfg
@@ -108,6 +111,7 @@ def save_config(paths: Paths, cfg: Config) -> None:
         if s.label:
             lines.append(f"label = {_toml_str(s.label)}")
         lines.append(f"packs = {_toml_list(sorted(s.packs))}")
+        lines.append(f"skills = {_toml_list(sorted(s.skills))}")
     paths.config.parent.mkdir(parents=True, exist_ok=True)
     paths.config.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -119,8 +123,10 @@ def resolve_skills(cfg: Config, scenario: str | None) -> set[str]:
         if scenario not in cfg.scenarios:
             known = ", ".join(sorted(cfg.scenarios)) or "(无)"
             raise ConfigError(f"场景 '{scenario}' 不存在。可用: {known}")
-        for pname in cfg.scenarios[scenario].packs:
+        sc = cfg.scenarios[scenario]
+        for pname in sc.packs:
             result.update(cfg.packs[pname].skills)
+        result.update(sc.skills)
     return result
 
 
