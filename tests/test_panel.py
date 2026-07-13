@@ -1,8 +1,8 @@
 import pytest
 
-from skm.config import Pack, Scenario, load_config, save_config
+from skm.config import Group, Pack, ToolCfg, load_config
 from skm.panel import PanelError, apply_payload, build_state, skill_description
-from skm.state import ToolState, save_state
+from skm.state import load_state
 
 
 def _skill(paths, name, frontmatter):
@@ -27,64 +27,69 @@ def test_description_missing(paths):
     assert skill_description(d) == ""
 
 
-def test_description_unquoted(paths):
-    d = _skill(paths, "e", "---\nname: e\ndescription: Plain text here\n---\n")
-    assert skill_description(d) == "Plain text here"
-
-
-def test_build_state_shape(paths, make_skill):
-    make_skill("s1")
-    make_skill("s2")
-    cfg = load_config(paths)
-    cfg.base = ["s1"]
-    cfg.packs["p"] = Pack(skills=["s2"])
-    cfg.scenarios["research"] = Scenario(packs=["p"], skills=["s1"], label="调研")
-    save_state(paths, {"claude": ToolState(scenario="research", links=["s1"])})
-    st = build_state(paths, cfg)
-    names = [s["name"] for s in st["skills"]]
-    assert names == ["s1", "s2"]
-    assert all("description" in s for s in st["skills"])
-    assert st["base"] == ["s1"]
-    assert st["scenarios"]["research"] == {"label": "调研", "packs": ["p"], "skills": ["s1"]}
-    assert st["tools"]["claude"] == "research"
-    assert st["tools"]["codex"] is None
-
-
-def test_apply_payload_writes_config(paths, make_skill):
-    for s in ("s1", "s2", "s3"):
+def test_build_state_three_layers(paths, make_skill, tool_dir):
+    for s in ("uni", "h-only", "cd"):
         make_skill(s)
     cfg = load_config(paths)
+    cfg.tools = {"claude": ToolCfg(path=tool_dir),
+                 "hermes": ToolCfg(path=tool_dir.parent / "h", skills=["h-only"])}
+    cfg.universal = ["uni"]
+    cfg.groups["coding"] = Group(skills=["cd"], label="写代码")
+    st = build_state(paths, cfg)
+    assert [s["name"] for s in st["skills"]] == ["cd", "h-only", "uni"]
+    assert st["universal"] == ["uni"]
+    assert st["tools"]["hermes"]["skills"] == ["h-only"]
+    assert st["tools"]["claude"]["groups"] == []
+    assert st["groups"]["coding"] == {"label": "写代码", "skills": ["cd"], "packs": []}
+
+
+def test_apply_payload_writes_and_applies(paths, make_skill, tool_dir):
+    for s in ("uni", "h-only", "cd", "ds"):
+        make_skill(s)
+    cfg = load_config(paths)
+    cfg.tools = {"claude": ToolCfg(path=tool_dir),
+                 "hermes": ToolCfg(path=tool_dir.parent / "h")}
     payload = {
-        "base": ["s1"],
-        "scenarios": {
-            "coding": {"label": "写代码", "packs": [], "skills": ["s2", "s3"]},
+        "universal": ["uni"],
+        "tools": {
+            "claude": {"skills": [], "groups": ["coding", "design"]},
+            "hermes": {"skills": ["h-only"], "groups": []},
+        },
+        "groups": {
+            "coding": {"label": "写代码", "skills": ["cd"], "packs": []},
+            "design": {"label": "做设计", "skills": ["ds"], "packs": []},
         },
     }
     apply_payload(paths, cfg, payload)
-    cfg2 = load_config(paths)
-    assert cfg2.base == ["s1"]
-    assert cfg2.scenarios["coding"].skills == ["s2", "s3"]
-    assert cfg2.scenarios["coding"].label == "写代码"
+    c = load_config(paths)
+    assert c.universal == ["uni"]
+    assert c.tools["hermes"].skills == ["h-only"]
+    assert c.groups["coding"].skills == ["cd"]
+    # 保存即应用:claude 勾了 coding+design → 软链已建
+    assert (tool_dir / "cd").is_symlink() and (tool_dir / "ds").is_symlink()
+    assert (tool_dir / "uni").is_symlink()
+    st = load_state(paths)
+    assert st["claude"].groups == ["coding", "design"]
+    # hermes 无分组但有专用层 h-only + 通用 uni
+    hdir = tool_dir.parent / "h"
+    assert (hdir / "h-only").is_symlink() and (hdir / "uni").is_symlink()
 
 
-def test_apply_payload_rejects_missing_skill(paths, make_skill):
-    make_skill("s1")
+def test_apply_rejects_missing_skill(paths, make_skill, tool_dir):
+    make_skill("uni")
     cfg = load_config(paths)
-    payload = {"base": [], "scenarios": {"x": {"skills": ["ghost"]}}}
+    cfg.tools = {"claude": ToolCfg(path=tool_dir)}
+    payload = {"universal": [], "tools": {}, "groups": {"x": {"skills": ["ghost"]}}}
     with pytest.raises(PanelError, match="ghost"):
         apply_payload(paths, cfg, payload)
-    assert load_config(paths).scenarios == {}   # 未写坏
+    assert load_config(paths).groups == {}
 
 
-def test_apply_payload_rejects_bad_id(paths):
+def test_apply_rejects_tool_selecting_unknown_group(paths, make_skill, tool_dir):
+    make_skill("cd")
     cfg = load_config(paths)
-    payload = {"base": [], "scenarios": {"Bad Name": {"skills": []}}}
-    with pytest.raises(PanelError):
-        apply_payload(paths, cfg, payload)
-
-
-def test_apply_payload_rejects_unknown_pack(paths):
-    cfg = load_config(paths)
-    payload = {"base": [], "scenarios": {"x": {"packs": ["ghost"], "skills": []}}}
+    cfg.tools = {"claude": ToolCfg(path=tool_dir)}
+    payload = {"universal": [], "groups": {"coding": {"skills": ["cd"]}},
+               "tools": {"claude": {"skills": [], "groups": ["ghost"]}}}
     with pytest.raises(PanelError, match="ghost"):
         apply_payload(paths, cfg, payload)

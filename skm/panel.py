@@ -1,4 +1,8 @@
-"""配置面板:SKILL.md 描述解析、状态构建、保存校验。HTTP 服务见文件末尾。"""
+"""配置面板:SKILL.md 描述解析、状态构建、保存并应用。HTTP 服务见文件末尾。
+
+面板编辑三层:universal(通用)、tools[*].skills(工具专用)、groups(分组,可多选)。
+保存时写回 config 并对每个工具按其勾选的分组重算软链。
+"""
 from __future__ import annotations
 
 import json
@@ -8,8 +12,9 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from .config import (ID_RE, Config, Scenario, load_config, missing_in_repo,
-                     save_config)
+from . import switcher
+from .config import (ID_RE, Config, Group, ToolCfg, load_config,
+                     missing_in_repo, save_config)
 from .paths import Paths
 from .state import load_state
 
@@ -40,7 +45,6 @@ def skill_description(skill_dir: Path) -> str:
         value = ln[len("description:"):].strip()
         if value and value not in _BLOCK_INDICATORS:
             return _clean(value)
-        # 块标量:收集后续更缩进的行,直到下一个顶层 key
         collected: list[str] = []
         for cont in fm[i + 1:]:
             if _KEY_RE.match(cont):
@@ -67,48 +71,72 @@ def build_state(paths: Paths, cfg: Config) -> dict:
     state = load_state(paths)
     return {
         "skills": skills,
-        "base": sorted(cfg.base),
+        "universal": sorted(cfg.universal),
         "packs": {n: sorted(p.skills) for n, p in sorted(cfg.packs.items())},
-        "scenarios": {
-            n: {"label": s.label, "packs": sorted(s.packs), "skills": sorted(s.skills)}
-            for n, s in sorted(cfg.scenarios.items())
+        "groups": {
+            n: {"label": g.label, "skills": sorted(g.skills), "packs": sorted(g.packs)}
+            for n, g in sorted(cfg.groups.items())
         },
-        "tools": {t: (state[t].scenario if t in state else None)
-                  for t in sorted(cfg.tools)},
+        "tools": {
+            t: {"skills": sorted(tc.skills),
+                "groups": (state[t].groups if t in state else [])}
+            for t, tc in sorted(cfg.tools.items())
+        },
     }
 
 
 def apply_payload(paths: Paths, cfg: Config, payload: dict) -> None:
-    """把面板提交的 base+scenarios 校验后写回 config。packs/tools 不动。"""
-    base = list(payload.get("base", []))
-    scenarios_in = payload.get("scenarios", {})
-    referenced = set(base)
-    new_scenarios: dict[str, Scenario] = {}
-    for name, body in scenarios_in.items():
+    """把面板提交的三层配置校验后写回 config,并对每个工具按勾选分组重算软链。"""
+    universal = list(payload.get("universal", []))
+    tools_in = payload.get("tools", {})
+    groups_in = payload.get("groups", {})
+
+    new_groups: dict[str, Group] = {}
+    for name, body in groups_in.items():
         if not ID_RE.match(name):
-            raise PanelError(f"场景名 '{name}' 不合法:只允许小写字母/数字/短横线")
+            raise PanelError(f"分组名 '{name}' 不合法:只允许小写字母/数字/短横线")
         packs = list(body.get("packs", []))
-        skills = list(body.get("skills", []))
         for p in packs:
             if p not in cfg.packs:
-                raise PanelError(f"场景 '{name}' 引用了不存在的 pack: {p}")
-        referenced.update(skills)
-        new_scenarios[name] = Scenario(packs=packs, skills=skills,
-                                       label=body.get("label") or None)
+                raise PanelError(f"分组 '{name}' 引用了不存在的 pack: {p}")
+        new_groups[name] = Group(skills=list(body.get("skills", [])), packs=packs,
+                                 label=body.get("label") or None)
+
+    new_tools: dict[str, ToolCfg] = {}
+    for name, tc in cfg.tools.items():
+        body = tools_in.get(name, {})
+        new_tools[name] = ToolCfg(path=tc.path, skills=list(body.get("skills", tc.skills)))
+
+    referenced = set(universal)
+    for tc in new_tools.values():
+        referenced |= set(tc.skills)
+    for g in new_groups.values():
+        referenced |= set(g.skills)
     missing = missing_in_repo(paths, referenced)
     if missing:
         raise PanelError("以下 skill 不在中央仓: " + ", ".join(missing))
-    cfg.base = base
-    cfg.scenarios = new_scenarios
+
+    for name, body in tools_in.items():
+        for g in body.get("groups", []):
+            if g not in new_groups:
+                raise PanelError(f"工具 '{name}' 选了不存在的分组: {g}")
+
+    cfg.universal = universal
+    cfg.tools = new_tools
+    cfg.groups = new_groups
     save_config(paths, cfg)
+
+    # 保存即应用:对每个工具按其勾选的分组重算软链
+    for name, body in tools_in.items():
+        if name in cfg.tools:
+            switcher.use(paths, cfg, name, list(body.get("groups", [])))
 
 
 _HTML = Path(__file__).parent / "panel.html"
 
 
 class _Server(ThreadingHTTPServer):
-    """ThreadingHTTPServer 会在 server_bind 里调 socket.getfqdn 做反向 DNS,
-    某些网络下会卡数十秒。这里跳过它,直接用 host 当 server_name。"""
+    """跳过 socket.getfqdn(反向 DNS,某些网络下会卡数十秒)。"""
 
     def server_bind(self):
         socketserver.TCPServer.server_bind(self)
@@ -121,10 +149,10 @@ def _make_handler(paths: Paths):
     html = _HTML.read_text(encoding="utf-8")
 
     class Handler(BaseHTTPRequestHandler):
-        def log_message(self, *a):  # 静默日志
+        def log_message(self, *a):
             pass
 
-        def address_string(self):  # 跳过反向 DNS(否则每请求卡数秒)
+        def address_string(self):
             return self.client_address[0]
 
         def _send(self, code: int, body: str, ctype: str) -> None:

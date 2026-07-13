@@ -15,8 +15,8 @@ from .switcher import Report, SwitchError
 
 
 def _print_report(rep: Report) -> None:
-    label = rep.scenario if rep.scenario is not None else "(仅 base)"
-    print(f"{rep.tool} → {label}")
+    gl = ", ".join(rep.groups) if rep.groups else "(仅通用层+专用层)"
+    print(f"{rep.tool} → 分组: {gl}")
     if rep.created:
         print(f"  新增 {len(rep.created)}: {', '.join(rep.created)}")
     if rep.removed:
@@ -33,12 +33,22 @@ def _print_report(rep: Report) -> None:
 def _cmd_use(paths: Paths, cfg: Config, args) -> int:
     tools = sorted(cfg.tools) if args.tool == "all" else [args.tool]
     for t in tools:
-        _print_report(switcher.use(paths, cfg, t, args.scenario))
+        _print_report(switcher.use(paths, cfg, t, args.groups))
+    return 0
+
+
+def _cmd_enable(paths: Paths, cfg: Config, args) -> int:
+    _print_report(switcher.enable(paths, cfg, args.tool, args.group))
+    return 0
+
+
+def _cmd_disable(paths: Paths, cfg: Config, args) -> int:
+    _print_report(switcher.disable(paths, cfg, args.tool, args.group))
     return 0
 
 
 def _cmd_reset(paths: Paths, cfg: Config, args) -> int:
-    _print_report(switcher.use(paths, cfg, args.tool, None))
+    _print_report(switcher.use(paths, cfg, args.tool, []))
     return 0
 
 
@@ -49,19 +59,28 @@ def _cmd_rollback(paths: Paths, cfg: Config, args) -> int:
 
 def _cmd_list(paths: Paths, cfg: Config, args) -> int:
     state = load_state(paths)
+    uni = ", ".join(sorted(cfg.universal)) or "(空)"
+    print(f"通用层({len(cfg.universal)}): {uni}")
     for tool in sorted(cfg.tools):
+        tc = cfg.tools[tool]
         ts = state.get(tool)
-        if ts is None:
-            print(f"{tool}: (未由 skm 管理)")
-            continue
-        label = "(仅 base)"
-        if ts.scenario:
-            sc = cfg.scenarios.get(ts.scenario)
-            zh = f"({sc.label})" if sc and sc.label else ""
-            label = f"{ts.scenario}{zh}"
-        print(f"{tool}: {label} — {len(ts.links)} 个 skill")
-        if ts.links:
-            print(f"  {', '.join(ts.links)}")
+        gl = ", ".join(ts.groups) if ts and ts.groups else "(无)"
+        total = len(ts.links) if ts else 0
+        managed = "" if ts else "  (未由 skm 管理)"
+        print(f"{tool}: 专用 {len(tc.skills)} + 分组[{gl}] → 共 {total} 个 skill{managed}")
+    return 0
+
+
+def _cmd_groups(paths: Paths, cfg: Config, args) -> int:
+    if not cfg.groups:
+        print("(还没有分组,用 skm panel 或编辑 config.toml 的 [groups.*])")
+    for name in sorted(cfg.groups):
+        g = cfg.groups[name]
+        zh = f"({g.label})" if g.label else ""
+        n = len(g.skills) + sum(len(cfg.packs[p].skills)
+                                for p in g.packs if p in cfg.packs)
+        extra = f"  [packs: {', '.join(g.packs)}]" if g.packs else ""
+        print(f"{name}{zh}: {n} 个 skill{extra}")
     return 0
 
 
@@ -73,16 +92,6 @@ def _cmd_packs(paths: Paths, cfg: Config, args) -> int:
         src = f"  [{p.source}]" if p.source else ""
         print(f"{name} ({len(p.skills)}){src}")
         print(f"  {', '.join(p.skills)}")
-    return 0
-
-
-def _cmd_scenarios(paths: Paths, cfg: Config, args) -> int:
-    if not cfg.scenarios:
-        print("(还没有场景,直接编辑 config.toml 的 [scenarios.*])")
-    for name in sorted(cfg.scenarios):
-        s = cfg.scenarios[name]
-        zh = f"({s.label})" if s.label else ""
-        print(f"{name}{zh}: packs = {', '.join(s.packs) or '(空)'}")
     return 0
 
 
@@ -128,9 +137,13 @@ def _cmd_upgrade(paths: Paths, cfg: Config, args) -> int:
 
 def doctor(paths: Paths, cfg: Config) -> list[str]:
     problems: list[str] = []
-    referenced = set(cfg.base)
+    referenced = set(cfg.universal)
+    for t in cfg.tools.values():
+        referenced |= set(t.skills)
     for p in cfg.packs.values():
         referenced |= set(p.skills)
+    for g in cfg.groups.values():
+        referenced |= set(g.skills)
     for m in missing_in_repo(paths, referenced):
         problems.append(f"config 引用的 skill 不在中央仓: {m}")
     if paths.skills.exists():
@@ -139,10 +152,11 @@ def doctor(paths: Paths, cfg: Config) -> list[str]:
                 problems.append(f"中央仓目录缺 SKILL.md: {d.name}")
     state = load_state(paths)
     for tool, ts in sorted(state.items()):
-        tool_dir = cfg.tools.get(tool)
-        if tool_dir is None:
+        tc = cfg.tools.get(tool)
+        if tc is None:
             problems.append(f"state 里有未知工具: {tool}")
             continue
+        tool_dir = tc.path
         for skill in ts.links:
             link = tool_dir / skill
             if not link.is_symlink():
@@ -177,12 +191,22 @@ def _build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="skm", description="跨工具 skill 管理器")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    p = sub.add_parser("use", help="切工具到场景(all = 所有工具)")
+    p = sub.add_parser("use", help="设定某工具启用的分组(all = 所有工具;不给分组=清空)")
     p.add_argument("tool")
-    p.add_argument("scenario")
+    p.add_argument("groups", nargs="*")
     p.set_defaults(fn=_cmd_use)
 
-    p = sub.add_parser("reset", help="清到仅 base")
+    p = sub.add_parser("enable", help="给工具增开一个分组")
+    p.add_argument("tool")
+    p.add_argument("group")
+    p.set_defaults(fn=_cmd_enable)
+
+    p = sub.add_parser("disable", help="给工具关掉一个分组")
+    p.add_argument("tool")
+    p.add_argument("group")
+    p.set_defaults(fn=_cmd_disable)
+
+    p = sub.add_parser("reset", help="清空该工具所有分组(留通用层+专用层)")
     p.add_argument("tool")
     p.set_defaults(fn=_cmd_reset)
 
@@ -190,9 +214,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("tool")
     p.set_defaults(fn=_cmd_rollback)
 
-    sub.add_parser("list", help="各工具当前场景").set_defaults(fn=_cmd_list)
+    sub.add_parser("list", help="各工具三层现状").set_defaults(fn=_cmd_list)
+    sub.add_parser("groups", help="所有分组").set_defaults(fn=_cmd_groups)
     sub.add_parser("packs", help="所有集合").set_defaults(fn=_cmd_packs)
-    sub.add_parser("scenarios", help="所有场景").set_defaults(fn=_cmd_scenarios)
 
     p = sub.add_parser("install", help="装单个本地 skill 进中央仓")
     p.add_argument("path")

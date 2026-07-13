@@ -2,7 +2,7 @@ import http.client
 import json
 import threading
 
-from skm.config import load_config
+from skm.config import ToolCfg, load_config, save_config
 from skm.panel import make_server
 
 
@@ -25,39 +25,40 @@ def _req(port, method, path, obj=None):
     return resp.status, data
 
 
-def test_server_end_to_end(paths, make_skill):
-    make_skill("s1")
+def test_server_end_to_end(paths, make_skill, tmp_path):
+    make_skill("uni")
     make_skill("s2")
-    load_config(paths)
+    cfg = load_config(paths)
+    cfg.tools = {"claude": ToolCfg(path=tmp_path / "claude")}
+    save_config(paths, cfg)
     httpd, port = _serve(paths)
     try:
-        # 首页 HTML
         status, body = _req(port, "GET", "/")
         assert status == 200 and b"skm" in body
 
-        # 状态接口
         status, body = _req(port, "GET", "/api/state")
         state = json.loads(body)
-        assert [s["name"] for s in state["skills"]] == ["s1", "s2"]
-        assert set(state["tools"]) == {"claude", "codex", "grok", "hermes"}
+        assert [s["name"] for s in state["skills"]] == ["s2", "uni"]
+        assert "universal" in state and "tools" in state and "groups" in state
 
-        # 保存
         status, body = _req(port, "POST", "/api/save", {
-            "base": ["s1"],
-            "scenarios": {"coding": {"label": "写代码", "skills": ["s2"], "packs": []}},
+            "universal": ["uni"],
+            "tools": {"claude": {"skills": [], "groups": ["coding"]}},
+            "groups": {"coding": {"label": "写代码", "skills": ["s2"], "packs": []}},
         })
         assert status == 200 and json.loads(body)["ok"] is True
-        cfg = load_config(paths)
-        assert cfg.base == ["s1"]
-        assert cfg.scenarios["coding"].skills == ["s2"]
-        assert cfg.scenarios["coding"].label == "写代码"
+        c = load_config(paths)
+        assert c.universal == ["uni"]
+        assert c.groups["coding"].skills == ["s2"]
+        assert (tmp_path / "claude" / "s2").is_symlink()   # 保存即应用
 
-        # 保存非法(skill 不存在)→ 400,config 不被写坏
+        # 非法 skill → 400,不写坏
         status, body = _req(port, "POST", "/api/save",
-                            {"base": [], "scenarios": {"x": {"skills": ["ghost"]}}})
+                            {"universal": [], "tools": {},
+                             "groups": {"x": {"skills": ["ghost"]}}})
         assert status == 400
         assert "ghost" in json.loads(body)["error"]
-        assert "coding" in load_config(paths).scenarios   # 旧配置仍在,未被坏写覆盖
+        assert "coding" in load_config(paths).groups   # 旧配置仍在
     finally:
         httpd.shutdown()
         httpd.server_close()

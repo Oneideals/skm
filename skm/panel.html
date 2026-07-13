@@ -6,216 +6,246 @@
 <title>skm 配置面板</title>
 <style>
   :root {
-    --bg: #14161a; --panel: #1c1f26; --panel2: #232733; --line: #2e333f;
-    --text: #e6e9ef; --muted: #8b93a3; --accent: #5b9dff; --accent2: #3ad29f;
-    --danger: #ff6b6b; --chip: #2b3040;
+    --bg:#14161a; --panel:#1c1f26; --panel2:#232733; --line:#2e333f;
+    --text:#e6e9ef; --muted:#8b93a3; --accent:#5b9dff; --green:#3ad29f;
+    --gold:#e0b341; --danger:#ff6b6b; --chip:#2b3040;
   }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-    font: 14px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
-  header { padding: 14px 20px; border-bottom: 1px solid var(--line);
-    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-    position: sticky; top: 0; background: var(--bg); z-index: 10; }
-  header h1 { font-size: 16px; margin: 0; }
-  .tools { display: flex; gap: 8px; flex-wrap: wrap; }
-  .tool { background: var(--panel2); border: 1px solid var(--line);
-    border-radius: 6px; padding: 3px 10px; font-size: 12px; color: var(--muted); }
-  .tool b { color: var(--text); }
-  .spacer { flex: 1; }
-  button { font: inherit; cursor: pointer; border: 1px solid var(--line);
-    background: var(--panel2); color: var(--text); border-radius: 6px; padding: 6px 12px; }
-  button:hover { border-color: var(--accent); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #06101f; font-weight: 600; }
-  button.mini { padding: 1px 7px; font-size: 12px; }
-  main { display: grid; grid-template-columns: 40% 60%; gap: 16px; padding: 16px 20px; align-items: start; }
-  .col-title { font-size: 12px; color: var(--muted); text-transform: uppercase;
-    letter-spacing: .05em; margin: 0 0 8px; }
-  #search { width: 100%; padding: 8px 10px; margin-bottom: 10px; background: var(--panel);
-    border: 1px solid var(--line); border-radius: 6px; color: var(--text); }
-  .pool { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-    padding: 8px; max-height: 74vh; overflow: auto; }
-  .skill { padding: 7px 9px; border-radius: 6px; cursor: grab; border: 1px solid transparent; }
-  .skill:hover { background: var(--panel2); border-color: var(--line); }
-  .skill .name { font-weight: 600; }
-  .skill .desc { color: var(--muted); font-size: 12px; overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap; }
-  .buckets { display: flex; flex-direction: column; gap: 12px; }
-  .bucket { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
-  .bucket.drag { border-color: var(--accent); background: #1a2130; }
-  .bucket.base { border-color: var(--accent2); }
-  .bucket-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .bucket-head .id { font-weight: 700; }
-  .bucket-head input { background: var(--panel2); border: 1px solid var(--line);
-    color: var(--text); border-radius: 5px; padding: 2px 6px; font-size: 12px; width: 90px; }
-  .count { color: var(--muted); font-size: 12px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; }
-  .chip { background: var(--chip); border: 1px solid var(--line); border-radius: 20px;
-    padding: 3px 8px 3px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
-  .chip.pack { border-color: var(--accent); color: var(--accent); }
-  .chip .x { cursor: pointer; color: var(--muted); font-weight: 700; }
-  .chip .x:hover { color: var(--danger); }
-  .empty { color: var(--muted); font-size: 12px; font-style: italic; }
-  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-    padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0;
-    transition: opacity .2s; pointer-events: none; z-index: 20; }
-  #toast.show { opacity: 1; }
-  #toast.ok { background: var(--accent2); color: #052018; }
-  #toast.err { background: var(--danger); color: #2a0808; }
-  .hint { color: var(--muted); font-size: 12px; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:14px/1.5 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; }
+  header { padding:12px 20px; border-bottom:1px solid var(--line); display:flex;
+    align-items:center; gap:12px; position:sticky; top:0; background:var(--bg); z-index:10; }
+  header h1 { font-size:16px; margin:0; }
+  .spacer { flex:1; }
+  button { font:inherit; cursor:pointer; border:1px solid var(--line);
+    background:var(--panel2); color:var(--text); border-radius:6px; padding:6px 12px; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#06101f; font-weight:600; }
+  button.mini { padding:1px 7px; font-size:12px; }
+  main { display:grid; grid-template-columns:36% 64%; gap:16px; padding:16px 20px; align-items:start; }
+  .col-title { font-size:12px; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.05em; margin:0 0 8px; }
+  #search { width:100%; padding:8px 10px; margin-bottom:10px; background:var(--panel);
+    border:1px solid var(--line); border-radius:6px; color:var(--text); }
+  .pool { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:8px; max-height:78vh; overflow:auto; position:sticky; top:70px; }
+  .skill { padding:7px 9px; border-radius:6px; cursor:grab; border:1px solid transparent; }
+  .skill:hover { background:var(--panel2); border-color:var(--line); }
+  .skill .name { font-weight:600; }
+  .skill .desc { color:var(--muted); font-size:12px; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+  .sec { margin-bottom:20px; }
+  .bucket { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:11px 12px; margin-bottom:10px; }
+  .bucket.drag { border-color:var(--accent); background:#1a2130; }
+  .bucket.uni { border-color:var(--green); }
+  .bucket.tool { border-color:var(--gold); }
+  .bhead { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+  .bhead .id { font-weight:700; }
+  .bhead input { background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    border-radius:5px; padding:2px 6px; font-size:12px; width:80px; }
+  .count { color:var(--muted); font-size:12px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; min-height:28px; }
+  .chip { background:var(--chip); border:1px solid var(--line); border-radius:20px;
+    padding:3px 8px 3px 10px; font-size:12px; display:inline-flex; align-items:center; gap:6px; }
+  .chip.pack { border-color:var(--accent); color:var(--accent); }
+  .chip .x { cursor:pointer; color:var(--muted); font-weight:700; }
+  .chip .x:hover { color:var(--danger); }
+  .empty { color:var(--muted); font-size:12px; font-style:italic; }
+  .grpsel { display:flex; flex-wrap:wrap; gap:10px; margin:6px 0 4px; }
+  .grpsel label { font-size:12px; display:inline-flex; align-items:center; gap:4px; cursor:pointer; }
+  .eff { color:var(--green); font-size:12px; }
+  #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); padding:10px 18px;
+    border-radius:8px; font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:20; }
+  #toast.show { opacity:1; } #toast.ok { background:var(--green); color:#052018; }
+  #toast.err { background:var(--danger); color:#2a0808; }
 </style>
 </head>
 <body>
 <header>
   <h1>🧩 skm 配置面板</h1>
-  <div class="tools" id="tools"></div>
+  <span class="count" id="hint"></span>
   <div class="spacer"></div>
-  <span class="hint" id="hint"></span>
-  <button id="add">+ 新建场景</button>
-  <button class="primary" id="save">保存</button>
+  <button id="addgrp">+ 新建分组</button>
+  <button class="primary" id="save">保存并应用</button>
 </header>
 <main>
   <section>
-    <p class="col-title">Skill 池(拖到右边场景桶)</p>
+    <p class="col-title">Skill 池(拖到右边任意桶)</p>
     <input id="search" placeholder="搜索 skill 名 / 描述…">
     <div class="pool" id="pool"></div>
   </section>
   <section>
-    <p class="col-title">场景分组</p>
-    <div class="buckets" id="buckets"></div>
+    <div class="sec">
+      <p class="col-title">① 通用层 — 所有工具常驻</p>
+      <div id="universal"></div>
+    </div>
+    <div class="sec">
+      <p class="col-title">② 分组 — 命名 skill 集,工具可多选</p>
+      <div id="groups"></div>
+    </div>
+    <div class="sec">
+      <p class="col-title">③ 工具 — 专用层 + 勾选启用哪些分组</p>
+      <div id="tools"></div>
+    </div>
   </section>
 </main>
 <div id="toast"></div>
 <script>
-let S = null;         // 服务器状态
-let model = null;     // { base:[...], scenarios:{ id:{label,skills:[],packs:[]} } }
+let S = null, model = null;
 
 async function load() {
   S = await (await fetch("/api/state")).json();
-  model = { base: [...S.base], scenarios: {} };
-  for (const [id, sc] of Object.entries(S.scenarios)) {
-    model.scenarios[id] = { label: sc.label || "", skills: [...sc.skills], packs: [...sc.packs] };
-  }
-  renderTools(); renderPool(); renderBuckets();
-}
-
-function renderTools() {
-  const el = document.getElementById("tools");
-  el.innerHTML = "";
-  for (const [t, sc] of Object.entries(S.tools)) {
-    const d = document.createElement("div");
-    d.className = "tool";
-    d.innerHTML = `${t} → <b>${sc || "(未切)"}</b>`;
-    el.appendChild(d);
-  }
-  document.getElementById("hint").textContent =
-    `中央仓 ${S.skills.length} 个 skill`;
+  model = { universal:[...S.universal], groups:{}, tools:{} };
+  for (const [id,g] of Object.entries(S.groups))
+    model.groups[id] = { label:g.label||"", skills:[...g.skills], packs:[...g.packs] };
+  for (const [t,tc] of Object.entries(S.tools))
+    model.tools[t] = { skills:[...tc.skills], groups:[...tc.groups] };
+  document.getElementById("hint").textContent = `中央仓 ${S.skills.length} 个 skill`;
+  renderPool(); renderAll();
 }
 
 function renderPool() {
-  const q = (document.getElementById("search").value || "").toLowerCase();
-  const pool = document.getElementById("pool");
-  pool.innerHTML = "";
+  const q = (document.getElementById("search").value||"").toLowerCase();
+  const pool = document.getElementById("pool"); pool.innerHTML = "";
   for (const s of S.skills) {
-    if (q && !(s.name.toLowerCase().includes(q) ||
-               (s.description || "").toLowerCase().includes(q))) continue;
+    if (q && !(s.name.toLowerCase().includes(q) || (s.description||"").toLowerCase().includes(q))) continue;
     const d = document.createElement("div");
     d.className = "skill"; d.draggable = true;
-    d.innerHTML = `<div class="name">${s.name}</div><div class="desc">${s.description || ""}</div>`;
+    d.innerHTML = `<div class="name">${s.name}</div><div class="desc">${s.description||""}</div>`;
     d.addEventListener("dragstart", e =>
       e.dataTransfer.setData("text/plain", JSON.stringify({kind:"skill", name:s.name})));
     pool.appendChild(d);
   }
 }
 
-function bucketEl(id, title, isBase) {
-  const b = document.createElement("div");
-  b.className = "bucket" + (isBase ? " base" : "");
-  const data = isBase ? {skills: model.base, packs: []} : model.scenarios[id];
-  const head = document.createElement("div");
-  head.className = "bucket-head";
-  head.innerHTML = `<span class="id">${title}</span>`;
-  if (!isBase) {
-    const lbl = document.createElement("input");
-    lbl.placeholder = "中文名"; lbl.value = data.label || "";
-    lbl.addEventListener("input", () => data.label = lbl.value);
-    head.appendChild(lbl);
-    const del = document.createElement("button");
-    del.className = "mini"; del.textContent = "删除场景";
-    del.addEventListener("click", () => { delete model.scenarios[id]; renderBuckets(); });
-    head.appendChild(del);
-  }
-  const cnt = document.createElement("span");
-  cnt.className = "count";
-  cnt.textContent = `${data.skills.length + data.packs.length} 项`;
-  head.appendChild(cnt);
-  b.appendChild(head);
-
-  const chips = document.createElement("div");
-  chips.className = "chips";
-  if (!data.skills.length && !data.packs.length)
-    chips.innerHTML = '<span class="empty">拖 skill 到这里</span>';
-  for (const p of data.packs) chips.appendChild(chip(p, () => {
-    data.packs = data.packs.filter(x => x !== p); renderBuckets();
-  }, true));
-  for (const sk of data.skills) chips.appendChild(chip(sk, () => {
-    data.skills = data.skills.filter(x => x !== sk); renderBuckets();
-  }, false));
-  b.appendChild(chips);
-
-  b.addEventListener("dragover", e => { e.preventDefault(); b.classList.add("drag"); });
-  b.addEventListener("dragleave", () => b.classList.remove("drag"));
-  b.addEventListener("drop", e => {
-    e.preventDefault(); b.classList.remove("drag");
-    const it = JSON.parse(e.dataTransfer.getData("text/plain"));
-    const arr = it.kind === "pack" ? data.packs : data.skills;
-    if (!arr.includes(it.name)) arr.push(it.name);
-    renderBuckets();
-  });
-  return b;
-}
-
 function chip(name, onRemove, isPack) {
   const c = document.createElement("span");
-  c.className = "chip" + (isPack ? " pack" : "");
-  c.innerHTML = `${isPack ? "📦 " : ""}${name} <span class="x">✕</span>`;
+  c.className = "chip" + (isPack?" pack":"");
+  c.innerHTML = `${isPack?"📦 ":""}${name} <span class="x">✕</span>`;
   c.querySelector(".x").addEventListener("click", onRemove);
   return c;
 }
 
-function renderBuckets() {
-  const el = document.getElementById("buckets");
-  el.innerHTML = "";
-  el.appendChild(bucketEl("__base__", "base(常驻)", true));
-  for (const id of Object.keys(model.scenarios).sort())
-    el.appendChild(bucketEl(id, id, false));
+function dropzone(el, arr, kind) {
+  el.addEventListener("dragover", e => { e.preventDefault(); el.classList.add("drag"); });
+  el.addEventListener("dragleave", () => el.classList.remove("drag"));
+  el.addEventListener("drop", e => {
+    e.preventDefault(); el.classList.remove("drag");
+    const it = JSON.parse(e.dataTransfer.getData("text/plain"));
+    if (it.kind !== kind) return;
+    if (!arr.includes(it.name)) arr.push(it.name);
+    renderAll();
+  });
+}
+
+function chipsInto(box, skills, packs, onDelSkill, onDelPack) {
+  box.className = "chips";
+  if (!skills.length && !(packs||[]).length) box.innerHTML = '<span class="empty">拖 skill 到这里</span>';
+  (packs||[]).forEach(p => box.appendChild(chip(p, () => onDelPack(p), true)));
+  skills.forEach(s => box.appendChild(chip(s, () => onDelSkill(s), false)));
+}
+
+function renderAll() {
+  // ① universal
+  const uni = document.getElementById("universal"); uni.innerHTML = "";
+  const ub = document.createElement("div"); ub.className = "bucket uni";
+  ub.innerHTML = `<div class="bhead"><span class="id">通用层</span><span class="count">${model.universal.length} 个</span></div>`;
+  const uchips = document.createElement("div");
+  chipsInto(uchips, model.universal, [], s => { model.universal = model.universal.filter(x=>x!==s); renderAll(); }, ()=>{});
+  ub.appendChild(uchips); dropzone(ub, model.universal, "skill"); uni.appendChild(ub);
+
+  // ② groups
+  const gel = document.getElementById("groups"); gel.innerHTML = "";
+  for (const id of Object.keys(model.groups).sort()) {
+    const g = model.groups[id];
+    const b = document.createElement("div"); b.className = "bucket";
+    const head = document.createElement("div"); head.className = "bhead";
+    head.innerHTML = `<span class="id">📁 ${id}</span>`;
+    const lbl = document.createElement("input"); lbl.placeholder="中文名"; lbl.value=g.label;
+    lbl.addEventListener("input", ()=>g.label=lbl.value); head.appendChild(lbl);
+    const del = document.createElement("button"); del.className="mini"; del.textContent="删除";
+    del.addEventListener("click", ()=>{ delete model.groups[id];
+      for (const t of Object.values(model.tools)) t.groups = t.groups.filter(x=>x!==id);
+      renderAll(); });
+    head.appendChild(del);
+    const cnt = document.createElement("span"); cnt.className="count";
+    cnt.textContent = `${g.skills.length+g.packs.length} 项`; head.appendChild(cnt);
+    b.appendChild(head);
+    const chips = document.createElement("div");
+    chipsInto(chips, g.skills, g.packs,
+      s => { g.skills = g.skills.filter(x=>x!==s); renderAll(); },
+      p => { g.packs = g.packs.filter(x=>x!==p); renderAll(); });
+    b.appendChild(chips); dropzone(b, g.skills, "skill"); gel.appendChild(b);
+  }
+
+  // ③ tools
+  const tel = document.getElementById("tools"); tel.innerHTML = "";
+  for (const t of Object.keys(model.tools).sort()) {
+    const tc = model.tools[t];
+    const b = document.createElement("div"); b.className = "bucket tool";
+    const eff = effective(t);
+    b.innerHTML = `<div class="bhead"><span class="id">🔧 ${t}</span>` +
+      `<span class="count">专用 ${tc.skills.length} 个</span>` +
+      `<span class="eff">最终启用 ${eff} 个</span></div>`;
+    // group checkboxes
+    const sel = document.createElement("div"); sel.className = "grpsel";
+    for (const gid of Object.keys(model.groups).sort()) {
+      const lab = document.createElement("label");
+      const cb = document.createElement("input"); cb.type="checkbox";
+      cb.checked = tc.groups.includes(gid);
+      cb.addEventListener("change", () => {
+        if (cb.checked) { if(!tc.groups.includes(gid)) tc.groups.push(gid); }
+        else tc.groups = tc.groups.filter(x=>x!==gid);
+        renderAll();
+      });
+      lab.appendChild(cb); lab.appendChild(document.createTextNode(gid)); sel.appendChild(lab);
+    }
+    if (!Object.keys(model.groups).length) sel.innerHTML = '<span class="empty">先建分组</span>';
+    b.appendChild(sel);
+    const chips = document.createElement("div");
+    chipsInto(chips, tc.skills, [], s => { tc.skills = tc.skills.filter(x=>x!==s); renderAll(); }, ()=>{});
+    b.appendChild(chips); dropzone(b, tc.skills, "skill"); tel.appendChild(b);
+  }
+}
+
+function effective(t) {
+  const tc = model.tools[t];
+  const set = new Set(model.universal);
+  tc.skills.forEach(s=>set.add(s));
+  for (const gid of tc.groups) {
+    const g = model.groups[gid]; if(!g) continue;
+    g.skills.forEach(s=>set.add(s));
+    g.packs.forEach(p => (S.packs[p]||[]).forEach(s=>set.add(s)));
+  }
+  return set.size;
 }
 
 document.getElementById("search").addEventListener("input", renderPool);
-document.getElementById("add").addEventListener("click", () => {
-  const id = (prompt("场景 id(英文小写/数字/短横线):") || "").trim();
+document.getElementById("addgrp").addEventListener("click", () => {
+  const id = (prompt("分组 id(英文小写/数字/短横线):")||"").trim();
   if (!id) return;
   if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) { toast("id 不合法", false); return; }
-  if (model.scenarios[id]) { toast("已存在", false); return; }
-  model.scenarios[id] = { label: "", skills: [], packs: [] };
-  renderBuckets();
+  if (model.groups[id]) { toast("已存在", false); return; }
+  model.groups[id] = { label:"", skills:[], packs:[] }; renderAll();
 });
 document.getElementById("save").addEventListener("click", async () => {
-  const payload = { base: model.base, scenarios: {} };
-  for (const [id, sc] of Object.entries(model.scenarios))
-    payload.scenarios[id] = { label: sc.label, skills: sc.skills, packs: sc.packs };
-  const r = await fetch("/api/save", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(payload) });
-  if (r.ok) toast("已保存到 config.toml — 记得 skm use <工具> <场景> 并重启工具", true);
-  else { const e = await r.json(); toast("保存失败:" + (e.error || r.status), false); }
+  const payload = { universal:model.universal, tools:{}, groups:{} };
+  for (const [id,g] of Object.entries(model.groups))
+    payload.groups[id] = { label:g.label, skills:g.skills, packs:g.packs };
+  for (const [t,tc] of Object.entries(model.tools))
+    payload.tools[t] = { skills:tc.skills, groups:tc.groups };
+  const r = await fetch("/api/save", { method:"POST",
+    headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) });
+  if (r.ok) { toast("已保存并应用 — 重启各工具会话生效", true); setTimeout(load, 600); }
+  else { const e = await r.json(); toast("失败:"+(e.error||r.status), false); }
 });
 
-function toast(msg, ok) {
+function toast(m, ok) {
   const t = document.getElementById("toast");
-  t.textContent = msg; t.className = "show " + (ok ? "ok" : "err");
-  setTimeout(() => t.className = "", 4000);
+  t.textContent = m; t.className = "show "+(ok?"ok":"err");
+  setTimeout(()=>t.className="", 4000);
 }
-
 load();
 </script>
 </body>
