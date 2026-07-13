@@ -52,8 +52,11 @@
   .chip .x { cursor:pointer; color:var(--muted); font-weight:700; }
   .chip .x:hover { color:var(--danger); }
   .empty { color:var(--muted); font-size:12px; font-style:italic; }
-  .grpsel { display:flex; flex-wrap:wrap; gap:10px; margin:6px 0 4px; }
+  .grpsel { display:flex; flex-wrap:wrap; gap:10px; margin:2px 0 4px; }
   .grpsel label { font-size:12px; display:inline-flex; align-items:center; gap:4px; cursor:pointer; }
+  .sublab { font-size:11px; color:var(--muted); margin:9px 0 3px; letter-spacing:.03em; }
+  .sublab.g { color:var(--accent); } .sublab.s { color:var(--gold); }
+  .divider { border-top:1px dashed var(--line); margin:8px 0 0; }
   .eff { color:var(--green); font-size:12px; }
   #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); padding:10px 18px;
     border-radius:8px; font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:20; }
@@ -186,9 +189,10 @@ function renderAll() {
     const b = document.createElement("div"); b.className = "bucket tool";
     const eff = effective(t);
     b.innerHTML = `<div class="bhead"><span class="id">🔧 ${t}</span>` +
-      `<span class="count">专用 ${tc.skills.length} 个</span>` +
-      `<span class="eff">最终启用 ${eff} 个</span></div>`;
-    // group checkboxes
+      `<span class="eff">最终启用 ${eff} 个 skill</span></div>`;
+    // —— 启用哪些分组(勾选,不影响别的工具)——
+    const sl1 = document.createElement("div"); sl1.className = "sublab g";
+    sl1.textContent = "启用分组(可多选,仅影响本工具)"; b.appendChild(sl1);
     const sel = document.createElement("div"); sel.className = "grpsel";
     for (const gid of Object.keys(model.groups).sort()) {
       const lab = document.createElement("label");
@@ -201,8 +205,13 @@ function renderAll() {
       });
       lab.appendChild(cb); lab.appendChild(document.createTextNode(gid)); sel.appendChild(lab);
     }
-    if (!Object.keys(model.groups).length) sel.innerHTML = '<span class="empty">先建分组</span>';
+    if (!Object.keys(model.groups).length) sel.innerHTML = '<span class="empty">先在 ② 建分组</span>';
     b.appendChild(sel);
+    // —— 本工具专用 skill(拖入,只给这个工具常驻)——
+    const div = document.createElement("div"); div.className = "divider"; b.appendChild(div);
+    const sl2 = document.createElement("div"); sl2.className = "sublab s";
+    sl2.textContent = `专用 skill · 只给 ${t}、常驻(${tc.skills.length}) — 拖 skill 到下方`;
+    b.appendChild(sl2);
     const chips = document.createElement("div");
     chipsInto(chips, tc.skills, [], s => { tc.skills = tc.skills.filter(x=>x!==s); renderAll(); }, ()=>{});
     b.appendChild(chips); dropzone(b, tc.skills, "skill"); tel.appendChild(b);
