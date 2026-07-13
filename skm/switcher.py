@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from . import linker
+from . import boundary, linker
 from .config import Config, missing_in_repo, resolve_for_tool
 from .paths import Paths
 from .state import ToolState, backup, latest_backup, load_state, save_state
@@ -25,6 +25,7 @@ class Report:
     kept: list[str] = field(default_factory=list)
     conflicts: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
+    blocked: list[str] = field(default_factory=list)
 
 
 def _apply(paths: Paths, cfg: Config, state: dict[str, ToolState],
@@ -39,8 +40,12 @@ def _apply(paths: Paths, cfg: Config, state: dict[str, ToolState],
             rep.removed.append(skill)
         else:
             rep.skipped.append(f"{skill}({status})")
+    foreign = boundary.foreign_skill_names(paths, tool_dir)
     links: list[str] = []
     for skill in sorted(target):
+        if skill in foreign:
+            rep.blocked.append(skill)
+            continue
         status = linker.create_link(paths, tool_dir, skill)
         if status == linker.CREATED:
             rep.created.append(skill)

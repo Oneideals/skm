@@ -88,3 +88,21 @@ def test_never_touches_user_dirs(paths, cfg, tool_dir):
     use(paths, cfg, "claude", ["coding"])
     use(paths, cfg, "claude", [])
     assert (tool_dir / "my-own").is_dir()
+
+
+from skm.config import save_config
+
+
+def test_guard_blocks_name_collision_with_tool_bundle(paths, cfg, tool_dir, make_skill):
+    make_skill("plan")                                  # 中央仓有 plan
+    cfg.groups["coding"].skills.append("plan")
+    save_config(paths, cfg)
+    nat = tool_dir / "software-development" / "plan"    # 工具自带嵌套同名(非 skm 建)
+    nat.mkdir(parents=True)
+    (nat / "SKILL.md").write_text("---\nname: plan\n---\n", encoding="utf-8")
+    rep = use(paths, cfg, "claude", ["coding"])
+    assert "plan" in rep.blocked
+    assert "plan" not in rep.created
+    assert not (tool_dir / "plan").is_symlink()         # 没有平铺链进去
+    assert "plan" not in load_state(paths)["claude"].links
+    assert (nat / "SKILL.md").exists()                  # 工具自带真身不动

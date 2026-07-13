@@ -27,6 +27,8 @@ def _print_report(rep: Report) -> None:
         print(f"  ⚠ 冲突未动: {c}")
     for s in rep.skipped:
         print(f"  ⚠ 跳过删除: {s}")
+    for b in rep.blocked:
+        print(f"  ⚠ 撞名跳过(工具自带同名,建链会致其加载失败): {b}")
     print(f"  重启 {rep.tool} 会话后生效")
 
 
