@@ -28,3 +28,33 @@ def test_foreign_names_includes_native_excludes_skm_links(paths, make_skill, too
 
 def test_foreign_names_empty_when_dir_absent(paths, tmp_path):
     assert boundary.foreign_skill_names(paths, tmp_path / "nope") == set()
+
+
+from skm.config import ToolCfg, load_config, save_config
+
+
+def _cfg_one_tool(paths, tool_dir):
+    c = load_config(paths)
+    c.tools = {"claude": ToolCfg(path=tool_dir)}
+    save_config(paths, c)
+    return c
+
+
+def test_prune_collisions_removes_only_colliding_skm_links(paths, tool_dir, make_skill):
+    make_skill("plan")
+    make_skill("solo")
+    linker.create_link(paths, tool_dir, "plan")
+    linker.create_link(paths, tool_dir, "solo")
+    nat = tool_dir / "sd" / "plan"
+    nat.mkdir(parents=True)
+    (nat / "SKILL.md").write_text("---\nname: plan\n---\n", encoding="utf-8")
+    cfg = _cfg_one_tool(paths, tool_dir)
+
+    dry = boundary.prune_collisions(paths, cfg, apply=False)
+    assert dry.removed == ["claude/plan"]
+    assert (tool_dir / "plan").is_symlink()             # dry-run 不动
+
+    boundary.prune_collisions(paths, cfg, apply=True)
+    assert not (tool_dir / "plan").exists()             # 撞名链删了
+    assert (tool_dir / "solo").is_symlink()             # 不撞名的留着
+    assert (nat / "SKILL.md").exists()                  # 工具自带真身不动

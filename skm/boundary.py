@@ -7,10 +7,13 @@ from __future__ import annotations
 
 import os
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import linker
+from .config import Config
 from .paths import Paths
+from .state import load_state, save_state
 
 _NAME_RE = re.compile(r"^name:\s*[\"']?([A-Za-z0-9_-]+)", re.M)
 
@@ -44,3 +47,35 @@ def foreign_skill_names(paths: Paths, tool_dir: Path) -> set[str]:
         if "SKILL.md" in files:
             names.add(skill_name(root_p / "SKILL.md"))
     return names
+
+
+@dataclass
+class PruneReport:
+    removed: list[str] = field(default_factory=list)   # "<tool>/<skill>"
+
+
+def prune_collisions(paths: Paths, cfg: Config, apply: bool = False) -> PruneReport:
+    """删除"与工具自带撞名"的 skm 软链(只动 skm 建的链,不碰工具自带真身)。"""
+    rep = PruneReport()
+    state = load_state(paths)
+    changed = False
+    for tool, tc in sorted(cfg.tools.items()):
+        tool_dir = tc.path
+        if not tool_dir.exists():
+            continue
+        foreign = foreign_skill_names(paths, tool_dir)
+        skm_links = {
+            e.name for e in tool_dir.iterdir()
+            if e.is_symlink() and linker.points_into_repo(paths, e)
+        }
+        for skill in sorted(skm_links & foreign):
+            rep.removed.append(f"{tool}/{skill}")
+            if apply:
+                linker.remove_link(paths, tool_dir, skill)
+                ts = state.get(tool)
+                if ts and skill in ts.links:
+                    ts.links = [s for s in ts.links if s != skill]
+                    changed = True
+    if apply and changed:
+        save_state(paths, state)
+    return rep

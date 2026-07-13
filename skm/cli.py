@@ -196,6 +196,16 @@ def _cmd_doctor(paths: Paths, cfg: Config, args) -> int:
     return 1
 
 
+def _cmd_prune_collisions(paths: Paths, cfg: Config, args) -> int:
+    rep = boundary.prune_collisions(paths, cfg, apply=args.apply)
+    if not rep.removed:
+        print("✓ 无撞名 skm 软链")
+        return 0
+    head = "已删除" if args.apply else "将删除(加 --apply 执行)"
+    print(f"{head}撞名 skm 软链 {len(rep.removed)}: {', '.join(rep.removed)}")
+    return 0
+
+
 def _cmd_panel(paths: Paths, cfg: Config, args) -> int:
     _panel.serve(paths, port=args.port, open_browser=not args.no_open)
     return 0
@@ -257,6 +267,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p.set_defaults(fn=_cmd_upgrade)
 
     sub.add_parser("doctor", help="健康检查").set_defaults(fn=_cmd_doctor)
+
+    p = sub.add_parser("prune-collisions", help="清掉与工具自带撞名的 skm 软链")
+    p.add_argument("--apply", action="store_true", help="执行(默认仅预览)")
+    p.set_defaults(fn=_cmd_prune_collisions)
 
     p = sub.add_parser("panel", help="打开可视化配置面板")
     p.add_argument("--port", type=int, default=8787)
