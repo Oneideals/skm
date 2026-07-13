@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import linker
-from .config import Config
+from .config import Config, save_config
 from .paths import Paths
-from .state import load_state, save_state
+from .state import backup, load_state, save_state
 
 _NAME_RE = re.compile(r"^name:\s*[\"']?([A-Za-z0-9_-]+)", re.M)
 
@@ -134,11 +135,44 @@ def _plan_sync(paths: Paths, cfg: Config, purge: set[str]) -> SyncReport:
 def sync_boundary(paths: Paths, cfg: Config, apply: bool = False) -> SyncReport:
     """中央仓收敛:把"其实是工具自带的冗余副本"清出中央仓。
 
-    apply=False 仅预览(Task 5);apply=True 执行(Task 6)。
+    apply=False 仅预览;apply=True 执行(操作前对每个工具备份,可 rollback)。
+    落地顺序:备份 → 删 skm 链 + 更新 state → 摘 config 引用 → 删中央仓副本。
     """
     purge = purge_candidates(paths, cfg)
     rep = _plan_sync(paths, cfg, purge)
     if not apply or not purge:
         return rep
+
+    state = load_state(paths)
+    for tool in sorted(state):
+        backup(paths, tool, state[tool])
+
+    for tool, tc in sorted(cfg.tools.items()):
+        ts = state.get(tool)
+        if not ts:
+            continue
+        keep: list[str] = []
+        for s in ts.links:
+            if s in purge:
+                linker.remove_link(paths, tc.path, s)
+            else:
+                keep.append(s)
+        ts.links = keep
+    save_state(paths, state)
+
+    cfg.universal = [s for s in cfg.universal if s not in purge]
+    for tc in cfg.tools.values():
+        tc.skills = [s for s in tc.skills if s not in purge]
+    for p in cfg.packs.values():
+        p.skills = [s for s in p.skills if s not in purge]
+    for g in cfg.groups.values():
+        g.skills = [s for s in g.skills if s not in purge]
+    save_config(paths, cfg)
+
+    for name in sorted(purge):
+        d = paths.skills / name
+        if d.is_dir() and not d.is_symlink():
+            shutil.rmtree(d)
+
     rep.applied = True
     return rep

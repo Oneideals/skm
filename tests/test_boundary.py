@@ -82,3 +82,40 @@ def test_purge_candidates_and_dry_run(paths, tool_dir, make_skill):
     assert rep.applied is False
     assert (paths.skills / "plan" / "SKILL.md").exists()   # 预览不删
     assert "plan" in load_config(paths).groups["coding"].skills  # 预览不改 config
+
+
+from skm.state import load_state
+from skm.switcher import use
+
+
+def test_sync_boundary_apply_purges_copies_links_and_refs(paths, tool_dir, make_skill):
+    make_skill("plan")                                  # 撞名 → purge
+    make_skill("mine")                                  # 保留
+    nat = tool_dir / "sd" / "plan"
+    nat.mkdir(parents=True)
+    (nat / "SKILL.md").write_text("---\nname: plan\n---\n", encoding="utf-8")
+    cfg = load_config(paths)
+    cfg.tools = {"claude": ToolCfg(path=tool_dir)}
+    cfg.groups["coding"] = Group(skills=["plan", "mine"])
+    save_config(paths, cfg)
+    # 先给 claude 建一条 plan 的 skm 链并登记到 state
+    linker.create_link(paths, tool_dir, "plan")
+    from skm.state import ToolState, save_state
+    save_state(paths, {"claude": ToolState(groups=["coding"], links=["plan", "mine"])})
+
+    rep = boundary.sync_boundary(paths, cfg, apply=True)
+    assert rep.applied is True
+    assert rep.purge == ["plan"]
+    # 中央仓副本删除,保留 mine
+    assert not (paths.skills / "plan").exists()
+    assert (paths.skills / "mine" / "SKILL.md").exists()
+    # skm 撞名链删除,工具自带真身保留
+    assert not (tool_dir / "plan").exists()
+    assert (nat / "SKILL.md").exists()
+    # config 引用摘除
+    assert "plan" not in load_config(paths).groups["coding"].skills
+    assert "mine" in load_config(paths).groups["coding"].skills
+    # state 里 plan 去掉、mine 保留
+    assert load_state(paths)["claude"].links == ["mine"]
+    # 有备份 → 可回滚
+    assert list(paths.backups.glob("claude-*.json"))
