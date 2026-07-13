@@ -206,6 +206,23 @@ def _cmd_prune_collisions(paths: Paths, cfg: Config, args) -> int:
     return 0
 
 
+def _cmd_sync_boundary(paths: Paths, cfg: Config, args) -> int:
+    rep = boundary.sync_boundary(paths, cfg, apply=args.apply)
+    if not rep.purge:
+        print("✓ 中央仓无工具自带的冗余副本,无需收敛")
+        return 0
+    head = "已收敛" if rep.applied else "将收敛(加 --apply 执行)"
+    print(f"{head}:purge {len(rep.purge)} 个中央仓副本")
+    print("  " + ", ".join(rep.purge))
+    if rep.unlinked:
+        print(f"  解链 {len(rep.unlinked)}: {', '.join(rep.unlinked)}")
+    if rep.deref:
+        print(f"  摘除引用 {len(rep.deref)}: {', '.join(rep.deref)}")
+    if rep.applied:
+        print("  已备份各工具状态,可 skm rollback <tool> 回滚链路")
+    return 0
+
+
 def _cmd_panel(paths: Paths, cfg: Config, args) -> int:
     _panel.serve(paths, port=args.port, open_browser=not args.no_open)
     return 0
@@ -271,6 +288,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("prune-collisions", help="清掉与工具自带撞名的 skm 软链")
     p.add_argument("--apply", action="store_true", help="执行(默认仅预览)")
     p.set_defaults(fn=_cmd_prune_collisions)
+
+    p = sub.add_parser("sync-boundary",
+                       help="中央仓收敛:清掉其实是工具自带的冗余副本")
+    p.add_argument("--apply", action="store_true", help="执行(默认仅预览)")
+    p.set_defaults(fn=_cmd_sync_boundary)
 
     p = sub.add_parser("panel", help="打开可视化配置面板")
     p.add_argument("--port", type=int, default=8787)

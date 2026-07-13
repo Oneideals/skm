@@ -79,3 +79,66 @@ def prune_collisions(paths: Paths, cfg: Config, apply: bool = False) -> PruneRep
     if apply and changed:
         save_state(paths, state)
     return rep
+
+
+def _tool_owned_names(paths: Paths, cfg: Config) -> set[str]:
+    owned: set[str] = set()
+    for tc in cfg.tools.values():
+        owned |= foreign_skill_names(paths, tc.path)
+    return owned
+
+
+def purge_candidates(paths: Paths, cfg: Config) -> set[str]:
+    """中央仓里其实是某工具自带冗余副本的 skill id(name 命中任一工具外来集合)。"""
+    if not paths.skills.exists():
+        return set()
+    owned = _tool_owned_names(paths, cfg)
+    out: set[str] = set()
+    for d in sorted(paths.skills.iterdir()):
+        smd = d / "SKILL.md"
+        if d.is_dir() and not d.is_symlink() and smd.exists():
+            if skill_name(smd) in owned:
+                out.add(d.name)
+    return out
+
+
+@dataclass
+class SyncReport:
+    purge: list[str] = field(default_factory=list)     # 中央仓 skill id
+    unlinked: list[str] = field(default_factory=list)   # "<tool>/<skill>"
+    deref: list[str] = field(default_factory=list)      # "<where>:<skill>"
+    applied: bool = False
+
+
+def _plan_sync(paths: Paths, cfg: Config, purge: set[str]) -> SyncReport:
+    rep = SyncReport(purge=sorted(purge))
+    state = load_state(paths)
+    for tool, ts in sorted(state.items()):
+        for s in sorted(set(ts.links) & purge):
+            rep.unlinked.append(f"{tool}/{s}")
+    for name in sorted(purge):
+        if name in cfg.universal:
+            rep.deref.append(f"universal:{name}")
+        for tn, tc in sorted(cfg.tools.items()):
+            if name in tc.skills:
+                rep.deref.append(f"tools.{tn}:{name}")
+        for pn, p in sorted(cfg.packs.items()):
+            if name in p.skills:
+                rep.deref.append(f"packs.{pn}:{name}")
+        for gn, g in sorted(cfg.groups.items()):
+            if name in g.skills:
+                rep.deref.append(f"groups.{gn}:{name}")
+    return rep
+
+
+def sync_boundary(paths: Paths, cfg: Config, apply: bool = False) -> SyncReport:
+    """中央仓收敛:把"其实是工具自带的冗余副本"清出中央仓。
+
+    apply=False 仅预览(Task 5);apply=True 执行(Task 6)。
+    """
+    purge = purge_candidates(paths, cfg)
+    rep = _plan_sync(paths, cfg, purge)
+    if not apply or not purge:
+        return rep
+    rep.applied = True
+    return rep

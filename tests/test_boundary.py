@@ -58,3 +58,27 @@ def test_prune_collisions_removes_only_colliding_skm_links(paths, tool_dir, make
     assert not (tool_dir / "plan").exists()             # 撞名链删了
     assert (tool_dir / "solo").is_symlink()             # 不撞名的留着
     assert (nat / "SKILL.md").exists()                  # 工具自带真身不动
+
+
+from skm.config import Group, Pack
+
+
+def test_purge_candidates_and_dry_run(paths, tool_dir, make_skill):
+    make_skill("plan")                                  # 与工具自带撞名 → 应 purge
+    make_skill("mine")                                  # 纯自有 → 保留
+    nat = tool_dir / "sd" / "plan"
+    nat.mkdir(parents=True)
+    (nat / "SKILL.md").write_text("---\nname: plan\n---\n", encoding="utf-8")
+    cfg = load_config(paths)
+    cfg.tools = {"claude": ToolCfg(path=tool_dir)}
+    cfg.groups["coding"] = Group(skills=["plan", "mine"])
+    save_config(paths, cfg)
+
+    assert boundary.purge_candidates(paths, cfg) == {"plan"}
+
+    rep = boundary.sync_boundary(paths, cfg, apply=False)
+    assert rep.purge == ["plan"]
+    assert "groups.coding:plan" in rep.deref
+    assert rep.applied is False
+    assert (paths.skills / "plan" / "SKILL.md").exists()   # 预览不删
+    assert "plan" in load_config(paths).groups["coding"].skills  # 预览不改 config
