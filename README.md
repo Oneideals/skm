@@ -5,13 +5,14 @@
 ## 模型
 
 ```
-Skill(原子)  →  Pack(集合)  →  Scenario(场景 = 若干 Pack 的组合)
-Base:无视场景永远启用的常驻层
-
-某工具最终启用的 skill = base ∪ 当前场景的所有 pack,其余禁用(软链移出)
+某工具最终启用的 skill = 通用层 ∪ 该工具专用层 ∪ ⋃(该工具勾选的各分组)
 ```
 
-- **按工具分别切**:每个工具独立持有自己的当前场景。
+- **通用层(universal)**:所有工具常驻的 skill。
+- **工具专用层**:每个工具自己的常驻 skill(如 Hermes 专属的 hermes-agent、petdex 只给 Hermes)。
+- **分组(group)**:命名的 skill 集(coding / design / research…),**一个工具可同时勾选多个**。
+
+- **按工具分别切**:每个工具独立持有自己勾选的分组。
 - **下次启动生效**:切换是软链增删,重启对应工具的会话后才生效。
 
 ## 安装
@@ -32,15 +33,18 @@ skm pack create <name> --skills a,b,c   # 手挑若干 skill 组一个 pack
 skm upgrade <pack>                      # 按来源 URL 更新
 
 # 切场景(核心)
-skm use <tool> <scenario>               # 把某工具切到某场景(tool=all 切全部)
-skm reset <tool>                        # 清到只剩 base
+skm use <tool> [group...]               # 设定某工具启用哪些分组(可多个;不给=清空)
+skm enable <tool> <group>               # 给工具增开一个分组
+skm disable <tool> <group>              # 给工具关掉一个分组
+skm use all coding                      # 便捷:所有工具都设为 coding
+skm reset <tool>                        # 清空该工具所有分组(留通用层+专用层)
 skm rollback <tool>                     # 回滚到上次切换前
 
 # 查看 / 体检
-skm list                                # 各工具当前场景 + 启用的 skill
-skm packs / skm scenarios               # 列所有集合 / 场景
+skm list                                # 各工具三层现状(通用 N + 专用 M + 分组[...])
+skm groups / skm packs                  # 列所有分组 / 集合
 skm doctor                              # 断链、孤儿链、缺失 skill 检查
-skm panel                               # 打开可视化配置面板(拖拽把 skill 组织进场景)
+skm panel                               # 打开可视化配置面板
 ```
 
 ## 可视化面板
