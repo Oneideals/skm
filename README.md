@@ -1,8 +1,16 @@
 # skm — 跨工具 Skill 管理器
 
+[![tests](https://github.com/Oneideals/skm/actions/workflows/ci.yml/badge.svg)](https://github.com/Oneideals/skm/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![python](https://img.shields.io/badge/python-%E2%89%A53.11-blue.svg)](https://www.python.org/)
+
 > 一份 skill 装一次,四个 AI CLI 工具(Claude Code / Codex / Grok / Hermes)通用;按**分组**成组启停 skill,只让当前需要的进上下文。
 
 `skm`(**sk**ill **m**anager)是一个零依赖的 Python 命令行工具,用一个中央仓 + 软链接,把 skill 分发给多个 AI 编码工具,并让你按"通用层 / 工具专用层 / 可多选分组"三个维度精确控制**每个工具在每次会话里加载哪些 skill**。
+
+![skm 配置面板](docs/panel.png)
+
+> `skm panel` 可视化面板:左边是 skill 池,右边三层 —— **① 通用层**(所有工具常驻)、**② 分组**(命名 skill 集)、**③ 每个工具**勾选启用哪些分组 + 自己的专用层。图中 Claude 开了 coding+design、Codex 只 coding、Grok 只 design、Hermes 开 research 且自带 11 个专属 skill。
 
 ---
 
