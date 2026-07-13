@@ -5,7 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import importer, linker, switcher
+from . import boundary, importer, linker, switcher
 from . import panel as _panel
 from .config import (ID_RE, Config, ConfigError, Pack, load_config,
                      missing_in_repo, save_config)
@@ -171,6 +171,18 @@ def doctor(paths: Paths, cfg: Config) -> list[str]:
                 if (entry.is_symlink() and linker.points_into_repo(paths, entry)
                         and entry.name not in recorded):
                     problems.append(f"{tool}: 孤儿 skm 软链(不在 state): {entry.name}")
+    for tool, tc in sorted(cfg.tools.items()):
+        tool_dir = tc.path
+        if not tool_dir.exists():
+            continue
+        foreign = boundary.foreign_skill_names(paths, tool_dir)
+        skm_names = {
+            e.name for e in tool_dir.iterdir()
+            if e.is_symlink() and linker.points_into_repo(paths, e)
+        }
+        for skill in sorted(skm_names & foreign):
+            problems.append(
+                f"{tool}: 撞名(skm 链与工具自带同名,加载会失败): {skill}")
     return problems
 
 

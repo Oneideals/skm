@@ -1,5 +1,6 @@
 import pytest
 
+from skm import cli, linker
 from skm.cli import main
 from skm.config import Group, ToolCfg, load_config, save_config
 
@@ -63,3 +64,16 @@ def test_groups_listing(env, capsys):
 def test_doctor_clean(env, capsys):
     assert main(["doctor"]) == 0
     assert "无问题" in capsys.readouterr().out
+
+
+def test_doctor_reports_name_collision(paths, tool_dir, make_skill):
+    make_skill("plan")
+    linker.create_link(paths, tool_dir, "plan")          # skm 链 plan
+    nat = tool_dir / "sd" / "plan"                        # 工具自带嵌套同名
+    nat.mkdir(parents=True)
+    (nat / "SKILL.md").write_text("---\nname: plan\n---\n", encoding="utf-8")
+    cfg = load_config(paths)
+    cfg.tools = {"claude": ToolCfg(path=tool_dir)}
+    save_config(paths, cfg)
+    problems = cli.doctor(paths, cfg)
+    assert any("撞名" in p and "plan" in p for p in problems)
