@@ -1,57 +1,80 @@
 import pytest
 
-from skm.config import (ConfigError, Pack, Scenario, load_config,
-                        missing_in_repo, resolve_skills, save_config)
+from skm.config import (ConfigError, Group, Pack, ToolCfg, load_config,
+                        missing_in_repo, resolve_for_tool, save_config)
 
 
 def test_load_creates_default(paths):
     cfg = load_config(paths)
     assert set(cfg.tools) == {"claude", "codex", "grok", "hermes"}
-    assert cfg.base == [] and cfg.packs == {} and cfg.scenarios == {}
+    assert cfg.universal == [] and cfg.packs == {} and cfg.groups == {}
+    assert all(t.skills == [] for t in cfg.tools.values())
     assert paths.config.exists()
 
 
-def test_roundtrip_with_chinese_label(paths):
+def test_roundtrip_all_three_layers(paths):
     cfg = load_config(paths)
-    cfg.base = ["code-review"]
-    cfg.packs["research"] = Pack(skills=["web-research", "arxiv"], source="https://x/y.git")
-    cfg.scenarios["research"] = Scenario(packs=["research"], label="调研")
+    cfg.universal = ["using-superpowers"]
+    cfg.tools["hermes"].skills = ["hermes-agent", "petdex"]
+    cfg.packs["sp"] = Pack(skills=["tdd"], source="https://x/y.git")
+    cfg.groups["coding"] = Group(skills=["debug"], packs=["sp"], label="写代码")
     save_config(paths, cfg)
-    cfg2 = load_config(paths)
-    assert cfg2.packs["research"].skills == ["arxiv", "web-research"]  # 保存时排序
-    assert cfg2.packs["research"].source == "https://x/y.git"
-    assert cfg2.scenarios["research"].label == "调研"
-    assert cfg2.base == ["code-review"]
+    c = load_config(paths)
+    assert c.universal == ["using-superpowers"]
+    assert c.tools["hermes"].skills == ["hermes-agent", "petdex"]
+    assert c.packs["sp"].skills == ["tdd"] and c.packs["sp"].source == "https://x/y.git"
+    assert c.groups["coding"].skills == ["debug"]
+    assert c.groups["coding"].packs == ["sp"]
+    assert c.groups["coding"].label == "写代码"
 
 
-def test_resolve_skills_union_and_dedupe(paths):
+def test_resolve_three_layer_union(paths):
     cfg = load_config(paths)
-    cfg.base = ["base-skill"]
-    cfg.packs["a"] = Pack(skills=["s1", "s2"])
-    cfg.packs["b"] = Pack(skills=["s2", "s3"])
-    cfg.scenarios["mix"] = Scenario(packs=["a", "b"])
-    assert resolve_skills(cfg, "mix") == {"base-skill", "s1", "s2", "s3"}
-    assert resolve_skills(cfg, None) == {"base-skill"}
+    cfg.universal = ["u1"]
+    cfg.tools["claude"].skills = ["c-only"]
+    cfg.tools["hermes"].skills = ["h-only"]
+    cfg.packs["p"] = Pack(skills=["pk"])
+    cfg.groups["coding"] = Group(skills=["cd"], packs=["p"])
+    cfg.groups["design"] = Group(skills=["ds"])
+    # claude 勾选 coding+design:通用 ∪ claude专用 ∪ 两个分组
+    assert resolve_for_tool(cfg, "claude", ["coding", "design"]) == {
+        "u1", "c-only", "cd", "pk", "ds"}
+    # hermes 不勾选任何分组:只有通用 ∪ hermes专用
+    assert resolve_for_tool(cfg, "hermes", []) == {"u1", "h-only"}
 
 
-def test_resolve_unknown_scenario_raises(paths):
+def test_resolve_dedupes_across_groups(paths):
+    cfg = load_config(paths)
+    cfg.groups["a"] = Group(skills=["shared", "a1"])
+    cfg.groups["b"] = Group(skills=["shared", "b1"])
+    assert resolve_for_tool(cfg, "claude", ["a", "b"]) == {"shared", "a1", "b1"}
+
+
+def test_resolve_unknown_group_raises(paths):
     cfg = load_config(paths)
     with pytest.raises(ConfigError):
-        resolve_skills(cfg, "nope")
+        resolve_for_tool(cfg, "claude", ["nope"])
 
 
-def test_scenario_referencing_missing_pack_raises(paths):
+def test_resolve_unknown_tool_raises(paths):
     cfg = load_config(paths)
-    cfg.scenarios["bad"] = Scenario(packs=["ghost"])
+    with pytest.raises(ConfigError):
+        resolve_for_tool(cfg, "vim", [])
+
+
+def test_group_referencing_missing_pack_raises(paths):
+    cfg = load_config(paths)
+    cfg.groups["bad"] = Group(packs=["ghost"])
     save_config(paths, cfg)
     with pytest.raises(ConfigError):
         load_config(paths)
 
 
-def test_invalid_id_rejected_on_load(paths):
+def test_invalid_group_id_rejected(paths):
     load_config(paths)
     text = paths.config.read_text(encoding="utf-8")
-    paths.config.write_text(text + '\n[packs."Bad Name"]\nskills = []\n', encoding="utf-8")
+    paths.config.write_text(text + '\n[groups."Bad Name"]\nskills = []\npacks = []\n',
+                            encoding="utf-8")
     with pytest.raises(ConfigError):
         load_config(paths)
 

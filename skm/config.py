@@ -1,4 +1,10 @@
-"""config.toml 的读取、校验、写回与 skill 集解析。"""
+"""config.toml 的读取、校验、写回与 skill 集解析。
+
+三层模型:某工具最终启用的 skill =
+    universal(通用,所有工具共享)
+  ∪ tools[tool].skills(该工具专用,常驻)
+  ∪ ⋃(该工具勾选的各 group 的 skills + 其 packs 展开)
+"""
 from __future__ import annotations
 
 import json
@@ -11,7 +17,7 @@ from .paths import Paths
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
-DEFAULT_TOOLS = {
+DEFAULT_TOOL_PATHS = {
     "claude": "~/.claude/skills",
     "codex": "~/.codex/skills",
     "grok": "~/.grok/skills",
@@ -24,24 +30,30 @@ class ConfigError(Exception):
 
 
 @dataclass
+class ToolCfg:
+    path: Path
+    skills: list[str] = field(default_factory=list)   # 工具专用常驻层
+
+
+@dataclass
 class Pack:
     skills: list[str] = field(default_factory=list)
     source: str | None = None
 
 
 @dataclass
-class Scenario:
-    packs: list[str] = field(default_factory=list)
+class Group:
     skills: list[str] = field(default_factory=list)
+    packs: list[str] = field(default_factory=list)
     label: str | None = None
 
 
 @dataclass
 class Config:
-    tools: dict[str, Path]
-    base: list[str]
+    universal: list[str]
+    tools: dict[str, ToolCfg]
     packs: dict[str, Pack]
-    scenarios: dict[str, Scenario]
+    groups: dict[str, Group]
 
 
 def _check_id(kind: str, name: str) -> None:
@@ -51,8 +63,10 @@ def _check_id(kind: str, name: str) -> None:
 
 def default_config() -> Config:
     return Config(
-        tools={k: Path(v).expanduser() for k, v in DEFAULT_TOOLS.items()},
-        base=[], packs={}, scenarios={},
+        universal=[],
+        tools={k: ToolCfg(path=Path(v).expanduser())
+               for k, v in DEFAULT_TOOL_PATHS.items()},
+        packs={}, groups={},
     )
 
 
@@ -63,28 +77,34 @@ def load_config(paths: Paths) -> Config:
         save_config(paths, cfg)
         return cfg
     raw = tomllib.loads(paths.config.read_text(encoding="utf-8"))
-    tools = {k: Path(str(v)).expanduser() for k, v in raw.get("tools", {}).items()}
-    base = list(raw.get("base", {}).get("skills", []))
+    universal = list(raw.get("universal", {}).get("skills", []))
+    tools: dict[str, ToolCfg] = {}
+    for name, body in raw.get("tools", {}).items():
+        if isinstance(body, str):          # 容错:旧式 tool = "路径"
+            tools[name] = ToolCfg(path=Path(body).expanduser())
+        else:
+            tools[name] = ToolCfg(path=Path(str(body["path"])).expanduser(),
+                                  skills=list(body.get("skills", [])))
     packs: dict[str, Pack] = {}
     for name, body in raw.get("packs", {}).items():
         _check_id("pack", name)
         packs[name] = Pack(skills=list(body.get("skills", [])), source=body.get("source"))
-    scenarios: dict[str, Scenario] = {}
-    for name, body in raw.get("scenarios", {}).items():
-        _check_id("scenario", name)
-        scenarios[name] = Scenario(packs=list(body.get("packs", [])),
-                                   skills=list(body.get("skills", [])),
-                                   label=body.get("label"))
-    cfg = Config(tools=tools, base=base, packs=packs, scenarios=scenarios)
+    groups: dict[str, Group] = {}
+    for name, body in raw.get("groups", {}).items():
+        _check_id("group", name)
+        groups[name] = Group(skills=list(body.get("skills", [])),
+                             packs=list(body.get("packs", [])),
+                             label=body.get("label"))
+    cfg = Config(universal=universal, tools=tools, packs=packs, groups=groups)
     _validate_refs(cfg)
     return cfg
 
 
 def _validate_refs(cfg: Config) -> None:
-    for sname, sc in cfg.scenarios.items():
-        missing = [p for p in sc.packs if p not in cfg.packs]
+    for gname, g in cfg.groups.items():
+        missing = [p for p in g.packs if p not in cfg.packs]
         if missing:
-            raise ConfigError(f"场景 '{sname}' 引用了不存在的 pack: {', '.join(missing)}")
+            raise ConfigError(f"分组 '{gname}' 引用了不存在的 pack: {', '.join(missing)}")
 
 
 def _toml_str(v: str) -> str:
@@ -96,37 +116,41 @@ def _toml_list(items: list[str]) -> str:
 
 
 def save_config(paths: Paths, cfg: Config) -> None:
-    lines: list[str] = ["[tools]"]
-    for k in sorted(cfg.tools):
-        lines.append(f"{k} = {_toml_str(str(cfg.tools[k]))}")
-    lines += ["", "[base]", f"skills = {_toml_list(sorted(cfg.base))}"]
+    lines: list[str] = ["[universal]", f"skills = {_toml_list(sorted(cfg.universal))}"]
+    for name in sorted(cfg.tools):
+        t = cfg.tools[name]
+        lines += ["", f"[tools.{name}]", f"path = {_toml_str(str(t.path))}",
+                  f"skills = {_toml_list(sorted(t.skills))}"]
     for name in sorted(cfg.packs):
         p = cfg.packs[name]
         lines += ["", f"[packs.{name}]", f"skills = {_toml_list(sorted(p.skills))}"]
         if p.source:
             lines.append(f"source = {_toml_str(p.source)}")
-    for name in sorted(cfg.scenarios):
-        s = cfg.scenarios[name]
-        lines += ["", f"[scenarios.{name}]"]
-        if s.label:
-            lines.append(f"label = {_toml_str(s.label)}")
-        lines.append(f"packs = {_toml_list(sorted(s.packs))}")
-        lines.append(f"skills = {_toml_list(sorted(s.skills))}")
+    for name in sorted(cfg.groups):
+        g = cfg.groups[name]
+        lines += ["", f"[groups.{name}]"]
+        if g.label:
+            lines.append(f"label = {_toml_str(g.label)}")
+        lines.append(f"packs = {_toml_list(sorted(g.packs))}")
+        lines.append(f"skills = {_toml_list(sorted(g.skills))}")
     paths.config.parent.mkdir(parents=True, exist_ok=True)
     paths.config.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def resolve_skills(cfg: Config, scenario: str | None) -> set[str]:
-    """base ∪ scenario 所有 packs 的 skill,去重。scenario=None 表示仅 base。"""
-    result = set(cfg.base)
-    if scenario is not None:
-        if scenario not in cfg.scenarios:
-            known = ", ".join(sorted(cfg.scenarios)) or "(无)"
-            raise ConfigError(f"场景 '{scenario}' 不存在。可用: {known}")
-        sc = cfg.scenarios[scenario]
-        for pname in sc.packs:
-            result.update(cfg.packs[pname].skills)
-        result.update(sc.skills)
+def resolve_for_tool(cfg: Config, tool: str, groups: list[str]) -> set[str]:
+    """某工具在勾选了 groups 时最终启用的 skill 集(三层并集,去重)。"""
+    if tool not in cfg.tools:
+        raise ConfigError(f"未知工具 '{tool}'。可用: {', '.join(sorted(cfg.tools))}")
+    result = set(cfg.universal)
+    result.update(cfg.tools[tool].skills)
+    for g in groups:
+        if g not in cfg.groups:
+            known = ", ".join(sorted(cfg.groups)) or "(无)"
+            raise ConfigError(f"分组 '{g}' 不存在。可用: {known}")
+        grp = cfg.groups[g]
+        result.update(grp.skills)
+        for p in grp.packs:
+            result.update(cfg.packs[p].skills)
     return result
 
 
