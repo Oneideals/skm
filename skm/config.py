@@ -33,6 +33,7 @@ class ConfigError(Exception):
 class ToolCfg:
     path: Path
     skills: list[str] = field(default_factory=list)   # 工具专用常驻层
+    owned_sources: list[Path] = field(default_factory=list)  # 工具所有权来源:清单文件/出厂树
 
 
 @dataclass
@@ -83,8 +84,11 @@ def load_config(paths: Paths) -> Config:
         if isinstance(body, str):          # 容错:旧式 tool = "路径"
             tools[name] = ToolCfg(path=Path(body).expanduser())
         else:
-            tools[name] = ToolCfg(path=Path(str(body["path"])).expanduser(),
-                                  skills=list(body.get("skills", [])))
+            tools[name] = ToolCfg(
+                path=Path(str(body["path"])).expanduser(),
+                skills=list(body.get("skills", [])),
+                owned_sources=[Path(str(p)).expanduser()
+                               for p in body.get("owned_sources", [])])
     packs: dict[str, Pack] = {}
     for name, body in raw.get("packs", {}).items():
         _check_id("pack", name)
@@ -121,6 +125,9 @@ def save_config(paths: Paths, cfg: Config) -> None:
         t = cfg.tools[name]
         lines += ["", f"[tools.{name}]", f"path = {_toml_str(str(t.path))}",
                   f"skills = {_toml_list(sorted(t.skills))}"]
+        if t.owned_sources:
+            lines.append(
+                f"owned_sources = {_toml_list(sorted(str(p) for p in t.owned_sources))}")
     for name in sorted(cfg.packs):
         p = cfg.packs[name]
         lines += ["", f"[packs.{name}]", f"skills = {_toml_list(sorted(p.skills))}"]

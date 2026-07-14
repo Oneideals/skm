@@ -82,3 +82,18 @@ def test_invalid_group_id_rejected(paths):
 def test_missing_in_repo(paths, make_skill):
     make_skill("here")
     assert missing_in_repo(paths, {"here", "gone"}) == ["gone"]
+
+
+def test_owned_sources_roundtrip(paths, tmp_path):
+    src1 = tmp_path / "manifest.json"
+    src2 = tmp_path / "bundle"
+    cfg = load_config(paths)
+    cfg.tools = {"hermes": ToolCfg(path=tmp_path / "h", owned_sources=[src1, src2])}
+    save_config(paths, cfg)
+    got = load_config(paths)
+    assert set(got.tools["hermes"].owned_sources) == {src1, src2}
+
+
+def test_owned_sources_default_empty(paths):
+    cfg = load_config(paths)
+    assert all(tc.owned_sources == [] for tc in cfg.tools.values())
