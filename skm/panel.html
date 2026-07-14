@@ -22,7 +22,7 @@
   button:hover { border-color:var(--accent); }
   button.primary { background:var(--accent); border-color:var(--accent); color:#06101f; font-weight:600; }
   button.mini { padding:1px 7px; font-size:12px; }
-  main { display:grid; grid-template-columns:36% 64%; gap:16px; padding:16px 20px; align-items:start; }
+  main { display:grid; grid-template-columns:28% 1fr 1fr; gap:16px; padding:16px 20px; align-items:start; }
   .col-title { font-size:12px; color:var(--muted); text-transform:uppercase;
     letter-spacing:.05em; margin:0 0 8px; }
   #search { width:100%; padding:8px 10px; margin-bottom:10px; background:var(--panel);
@@ -87,6 +87,8 @@
       <p class="col-title">② 分组 — 命名 skill 集,工具可多选</p>
       <div id="groups"></div>
     </div>
+  </section>
+  <section>
     <div class="sec">
       <p class="col-title">③ 工具 — 专用层 + 勾选启用哪些分组</p>
       <div id="tools"></div>
