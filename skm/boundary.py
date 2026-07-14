@@ -116,7 +116,8 @@ class SyncReport:
 def _plan_sync(paths: Paths, cfg: Config, purge: set[str]) -> SyncReport:
     rep = SyncReport(purge=sorted(purge))
     state = load_state(paths)
-    for tool, ts in sorted(state.items()):
+    for tool in sorted(set(state) & set(cfg.tools)):
+        ts = state[tool]
         for s in sorted(set(ts.links) & purge):
             rep.unlinked.append(f"{tool}/{s}")
     for name in sorted(purge):
