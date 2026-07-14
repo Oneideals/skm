@@ -65,11 +65,12 @@ def prune_collisions(paths: Paths, cfg: Config, apply: bool = False) -> PruneRep
         if not tool_dir.exists():
             continue
         foreign = foreign_skill_names(paths, tool_dir)
-        skm_links = {
-            e.name for e in tool_dir.iterdir()
-            if e.is_symlink() and linker.points_into_repo(paths, e)
-        }
-        for skill in sorted(skm_links & foreign):
+        for entry in sorted(tool_dir.iterdir()):
+            if not (entry.is_symlink() and linker.points_into_repo(paths, entry)):
+                continue
+            if skill_name(entry / "SKILL.md") not in foreign:
+                continue
+            skill = entry.name
             rep.removed.append(f"{tool}/{skill}")
             if apply:
                 linker.remove_link(paths, tool_dir, skill)

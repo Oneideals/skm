@@ -106,3 +106,19 @@ def test_guard_blocks_name_collision_with_tool_bundle(paths, cfg, tool_dir, make
     assert not (tool_dir / "plan").is_symlink()         # 没有平铺链进去
     assert "plan" not in load_state(paths)["claude"].links
     assert (nat / "SKILL.md").exists()                  # 工具自带真身不动
+
+
+def test_guard_matches_frontmatter_name_not_dir_id(paths, cfg, tool_dir, make_skill):
+    # 中央仓目录 id = "my-plan",但 frontmatter name = "plan"
+    d = paths.skills / "my-plan"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text("---\nname: plan\n---\n", encoding="utf-8")
+    cfg.groups["coding"].skills.append("my-plan")
+    save_config(paths, cfg)
+    # 工具自带 name: plan(嵌套,非 skm 建)
+    nat = tool_dir / "sd" / "plan"
+    nat.mkdir(parents=True)
+    (nat / "SKILL.md").write_text("---\nname: plan\n---\n", encoding="utf-8")
+    rep = use(paths, cfg, "claude", ["coding"])
+    assert "my-plan" in rep.blocked                  # 按 name 拦住,而非按目录 id
+    assert not (tool_dir / "my-plan").is_symlink()

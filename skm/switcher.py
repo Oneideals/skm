@@ -43,7 +43,7 @@ def _apply(paths: Paths, cfg: Config, state: dict[str, ToolState],
     foreign = boundary.foreign_skill_names(paths, tool_dir)
     links: list[str] = []
     for skill in sorted(target):
-        if skill in foreign:
+        if boundary.skill_name(paths.skills / skill / "SKILL.md") in foreign:
             rep.blocked.append(skill)
             continue
         status = linker.create_link(paths, tool_dir, skill)
