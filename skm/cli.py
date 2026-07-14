@@ -218,7 +218,8 @@ def _cmd_sync_boundary(paths: Paths, cfg: Config, args) -> int:
     if rep.deref:
         print(f"  摘除引用 {len(rep.deref)}: {', '.join(rep.deref)}")
     if rep.applied:
-        print("  已备份各工具状态,可 skm rollback <tool> 回滚链路")
+        print("  已快照 state + config 到 ~/.skm/backups/(可手工恢复配置)")
+        print("  注意:purge 的中央仓副本是工具自带的冗余份,已单向移除;需要时重新 skm import")
     return 0
 
 

@@ -119,3 +119,5 @@ def test_sync_boundary_apply_purges_copies_links_and_refs(paths, tool_dir, make_
     assert load_state(paths)["claude"].links == ["mine"]
     # 有备份 → 可回滚
     assert list(paths.backups.glob("claude-*.json"))
+    # config.toml 也快照到 backups(2a)
+    assert list(paths.backups.glob("config-*.toml"))

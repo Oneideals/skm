@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -147,6 +148,11 @@ def sync_boundary(paths: Paths, cfg: Config, apply: bool = False) -> SyncReport:
     state = load_state(paths)
     for tool in sorted(state):
         backup(paths, tool, state[tool])
+
+    paths.ensure()
+    if paths.config.exists():
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        shutil.copy2(paths.config, paths.backups / f"config-{stamp}.toml")
 
     for tool, tc in sorted(cfg.tools.items()):
         ts = state.get(tool)
