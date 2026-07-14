@@ -129,7 +129,8 @@ skm upgrade <pack>             按来源 URL 重新拉取更新一个 pack
 skm list                       各工具三层现状(通用 N + 专用 M + 分组[...])
 skm groups                     列出所有分组
 skm packs                      列出所有集合(pack)
-skm doctor                     健康检查:断链、孤儿链、缺失 skill
+skm doctor                     健康检查:断链、孤儿链、缺失 skill、工具血统残留
+skm sync-boundary [--apply]    中央仓收敛:清掉其实归工具所有的血统副本(默认预览;正被工具用则自动移交)
 skm panel [--port N] [--no-open]
                                打开可视化配置面板
 ```
@@ -168,6 +169,10 @@ skills = []
 [tools.hermes]
 path = "~/.hermes/skills"
 skills = ["hermes-agent", "petdex"]   # 只给 Hermes 常驻
+owned_sources = [                     # Hermes 自己管的 skill(见"工具边界"),防其混进中央仓
+  "~/.hermes/skills/.webui-managed-skills.json",
+  "~/.hermes/hermes-agent/skills",
+]
 
 [packs.superpowers]                # 集合:通常来自 import
 skills = ["brainstorming", "test-driven-development", "..."]
@@ -181,6 +186,31 @@ packs = ["superpowers"]            # 也可引用整个 pack
 
 - 标识符(skill / pack / group 名)一律**英文小写 + 短横线**;分组可额外带一个 `label` 中文名用于面板显示。
 - 引用了中央仓里不存在的 skill 会在加载/切换时报错,不会静默跳过。
+
+---
+
+## 工具边界:`owned_sources`
+
+中央仓只放**你经 `skm install` / `import` 主动装的 skill**;工具**自带或自行托管**的 skill 归工具自己管——它们会随该工具在别处重装而回来,不该躺进中央仓做分发(有的还只能在该工具里跑,别的工具用不上)。
+
+skm 靠每个工具在 config 里声明的 `owned_sources` 识别这类"工具血统" skill:
+
+```toml
+[tools.hermes]
+path = "~/.hermes/skills"
+owned_sources = [
+  "~/.hermes/skills/.webui-managed-skills.json",   # 清单文件:JSON 的 key 即 skill 名
+  "~/.hermes/hermes-agent/skills",                 # 目录树:递归扫 SKILL.md
+]
+```
+
+- **清单文件**(`.json`):对象取 key、数组取元素作为 skill 名(适配工具自己的"已安装 / 已托管"清单)。
+- **目录树**:递归扫 `SKILL.md`(适配工具的出厂 / 内置 skill 目录);指向中央仓的 skm 软链会被自动排除,不会误判自己。
+
+判定:某工具"所有"的 skill = 它 live 目录里的物理真身 ∪ 各 `owned_sources` 声明的名字。据此:
+
+- **`skm doctor`** 点名**中央仓里的工具血统残留**(以及配错、不存在的 `owned_sources` 路径)。
+- **`skm sync-boundary`**(预览)/ **`--apply`**(执行)把这些残留清出中央仓;**若某残留正被工具用着(skm 软链),会先把实体真身移交给工具**(落成工具自己的目录),再从中央仓与 config 摘除——收敛对工具非破坏。
 
 ---
 
@@ -218,7 +248,7 @@ skm/
 │   ├── panel.py       配置面板:数据构建、保存应用、HTTP 服务
 │   ├── panel.html     面板单页(自包含,原生 JS 拖拽)
 │   └── cli.py         命令行入口
-├── tests/             pytest 测试(60 项)
+├── tests/             pytest 测试(81 项)
 ├── bin/skm            可执行入口
 └── docs/              设计与实现文档
 ```
@@ -230,7 +260,7 @@ skm/
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install pytest
-.venv/bin/python -m pytest -q        # 60 tests
+.venv/bin/python -m pytest -q        # 81 tests
 ```
 
 代码遵循:纯标准库、单文件 ≤ 400 行、TDD(测试先行)。
