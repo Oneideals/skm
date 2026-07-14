@@ -138,7 +138,7 @@ def _plan_sync(paths: Paths, cfg: Config, purge: set[str]) -> SyncReport:
 def sync_boundary(paths: Paths, cfg: Config, apply: bool = False) -> SyncReport:
     """中央仓收敛:把"其实是工具自带的冗余副本"清出中央仓。
 
-    apply=False 仅预览;apply=True 执行(操作前对每个工具备份,可 rollback)。
+    apply=False 仅预览;apply=True 执行(前置备份 state+config;rollback 恢复链路,但不重建已删副本)。
     落地顺序:备份 → 删 skm 链 + 更新 state → 摘 config 引用 → 删中央仓副本。
     """
     purge = purge_candidates(paths, cfg)
