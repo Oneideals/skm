@@ -77,3 +77,23 @@ def test_doctor_reports_name_collision(paths, tool_dir, make_skill):
     save_config(paths, cfg)
     problems = cli.doctor(paths, cfg)
     assert any("撞名" in p and "plan" in p for p in problems)
+
+
+def test_doctor_flags_owned_residual(paths, make_skill, tool_dir, tmp_path):
+    make_skill("webby")
+    manifest = tmp_path / "m.json"
+    manifest.write_text('{"webby": {}}', encoding="utf-8")
+    cfg = load_config(paths)
+    cfg.tools = {"hermes": ToolCfg(path=tool_dir, owned_sources=[manifest])}
+    save_config(paths, cfg)
+    problems = cli.doctor(paths, cfg)
+    assert any("webby" in p and "血统残留" in p for p in problems)
+
+
+def test_doctor_flags_missing_owned_source(paths, tool_dir, tmp_path):
+    cfg = load_config(paths)
+    cfg.tools = {"hermes": ToolCfg(path=tool_dir,
+                                   owned_sources=[tmp_path / "gone.json"])}
+    save_config(paths, cfg)
+    problems = cli.doctor(paths, cfg)
+    assert any("owned_source 路径不存在" in p for p in problems)

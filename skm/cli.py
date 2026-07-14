@@ -182,6 +182,13 @@ def doctor(paths: Paths, cfg: Config) -> list[str]:
             if boundary.skill_name(entry / "SKILL.md") in foreign:
                 problems.append(
                     f"{tool}: 撞名(skm 链与工具自带同名,加载会失败): {entry.name}")
+    for name in sorted(boundary.purge_candidates(paths, cfg)):
+        problems.append(
+            f"中央仓存在工具血统残留(可 sync-boundary 收敛): {name}")
+    for tool, tc in sorted(cfg.tools.items()):
+        for src in tc.owned_sources:
+            if not src.exists():
+                problems.append(f"{tool}: owned_source 路径不存在: {src}")
     return problems
 
 
@@ -217,6 +224,8 @@ def _cmd_sync_boundary(paths: Paths, cfg: Config, args) -> int:
         print(f"  解链 {len(rep.unlinked)}: {', '.join(rep.unlinked)}")
     if rep.deref:
         print(f"  摘除引用 {len(rep.deref)}: {', '.join(rep.deref)}")
+    if rep.handoff:
+        print(f"  移交实体真身给工具 {len(rep.handoff)}: {', '.join(rep.handoff)}")
     if rep.applied:
         print("  已快照 state + config 到 ~/.skm/backups/(可手工恢复配置)")
         print("  注意:purge 的中央仓副本是工具自带的冗余份,已单向移除;需要时重新 skm import")
