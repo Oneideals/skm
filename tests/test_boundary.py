@@ -171,3 +171,44 @@ def test_purge_candidates_via_owned_source(paths, make_skill, tool_dir, tmp_path
     save_config(paths, cfg)
     # tool_dir 里没有 webby 的物理真身,仅清单声明 → 仍应被判为工具血统
     assert "webby" in boundary.purge_candidates(paths, cfg)
+
+
+def test_sync_apply_handoff_when_no_native(paths, make_skill, tool_dir, tmp_path):
+    from skm.state import ToolState, save_state
+    make_skill("webby")
+    linker.create_link(paths, tool_dir, "webby")
+    manifest = tmp_path / "m.json"
+    manifest.write_text('{"webby": {}}', encoding="utf-8")
+    cfg = load_config(paths)
+    cfg.tools = {"hermes": ToolCfg(path=tool_dir, owned_sources=[manifest])}
+    save_config(paths, cfg)
+    save_state(paths, {"hermes": ToolState(links=["webby"])})
+
+    rep = boundary.sync_boundary(paths, cfg, apply=True)
+
+    assert "webby" in rep.purge
+    assert "hermes/webby" in rep.handoff
+    live = tool_dir / "webby"
+    assert live.is_dir() and not live.is_symlink()      # 已移交实体真身
+    assert (live / "SKILL.md").exists()
+    assert not (paths.skills / "webby").exists()        # 中央仓副本已删
+
+
+def test_sync_apply_unlink_only_when_native_exists(paths, make_skill, tool_dir):
+    from skm.state import ToolState, save_state
+    make_skill("plan")
+    linker.create_link(paths, tool_dir, "plan")
+    nat = tool_dir / "sd" / "plan"                       # 工具原生嵌套真身
+    nat.mkdir(parents=True)
+    (nat / "SKILL.md").write_text("---\nname: plan\n---\n", encoding="utf-8")
+    cfg = load_config(paths)
+    cfg.tools = {"claude": ToolCfg(path=tool_dir)}
+    save_config(paths, cfg)
+    save_state(paths, {"claude": ToolState(links=["plan"])})
+
+    rep = boundary.sync_boundary(paths, cfg, apply=True)
+
+    assert "plan" in rep.purge
+    assert rep.handoff == []                             # 有原生副本 → 不移交
+    assert not (tool_dir / "plan").is_symlink()          # 顶层 skm 链已删
+    assert (nat / "SKILL.md").exists()                   # 原生真身留存

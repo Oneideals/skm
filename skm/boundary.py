@@ -141,6 +141,7 @@ class SyncReport:
     purge: list[str] = field(default_factory=list)     # 中央仓 skill id
     unlinked: list[str] = field(default_factory=list)   # "<tool>/<skill>"
     deref: list[str] = field(default_factory=list)      # "<where>:<skill>"
+    handoff: list[str] = field(default_factory=list)    # "<tool>/<skill>" 移交实体真身
     applied: bool = False
 
 
@@ -190,12 +191,18 @@ def sync_boundary(paths: Paths, cfg: Config, apply: bool = False) -> SyncReport:
         ts = state.get(tool)
         if not ts:
             continue
+        native = foreign_skill_names(paths, tc.path)   # 移交前算:此刻 skm 链被排除
         keep: list[str] = []
         for s in ts.links:
-            if s in purge:
-                linker.remove_link(paths, tc.path, s)
-            else:
+            if s not in purge:
                 keep.append(s)
+                continue
+            nm = skill_name(paths.skills / s / "SKILL.md")
+            src = paths.skills / s
+            linker.remove_link(paths, tc.path, s)
+            if nm not in native and src.is_dir() and not (tc.path / s).exists():
+                shutil.copytree(src, tc.path / s)      # 移交:落实体真身给工具
+                rep.handoff.append(f"{tool}/{s}")
         ts.links = keep
     save_state(paths, state)
 
