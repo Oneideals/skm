@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -30,24 +31,54 @@ def skill_name(skill_md: Path) -> str:
     return m.group(1) if m else skill_md.parent.name
 
 
-def foreign_skill_names(paths: Paths, tool_dir: Path) -> set[str]:
-    """工具自带(非 skm 建)skill 的 name 集合。
-
-    遍历时剪掉"指向中央仓的软链"目录——那是 skm 自己的,不算外来,
-    也不进入其中递归(避免把中央仓的 skill 误当工具自带)。
-    """
+def _names_in_tree(paths: Paths, root: Path) -> set[str]:
+    """扫 root 下所有 SKILL.md 的 name;剪掉指向中央仓的 skm 软链目录(不进其递归)。"""
     names: set[str] = set()
-    if not tool_dir.exists():
+    if not root.exists():
         return names
-    for root, dirs, files in os.walk(tool_dir, followlinks=True):
-        root_p = Path(root)
+    for cur, dirs, files in os.walk(root, followlinks=True):
+        cur_p = Path(cur)
         dirs[:] = [
             d for d in dirs
-            if not ((root_p / d).is_symlink()
-                    and linker.points_into_repo(paths, root_p / d))
+            if not ((cur_p / d).is_symlink()
+                    and linker.points_into_repo(paths, cur_p / d))
         ]
         if "SKILL.md" in files:
-            names.add(skill_name(root_p / "SKILL.md"))
+            names.add(skill_name(cur_p / "SKILL.md"))
+    return names
+
+
+def foreign_skill_names(paths: Paths, tool_dir: Path) -> set[str]:
+    """工具自带(非 skm 建)skill 的 name 集合(见 _names_in_tree)。"""
+    return _names_in_tree(paths, tool_dir)
+
+
+def _names_from_manifest(source: Path) -> set[str]:
+    """清单文件(JSON):对象取 key,数组取元素;解析失败返回空。"""
+    try:
+        data = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    if isinstance(data, dict):
+        return {str(k) for k in data}
+    if isinstance(data, list):
+        return {str(x) for x in data}
+    return set()
+
+
+def _names_from_source(paths: Paths, source: Path) -> set[str]:
+    if not source.exists():
+        return set()
+    if source.is_dir():
+        return _names_in_tree(paths, source)
+    return _names_from_manifest(source)
+
+
+def owned_skill_names(paths: Paths, tool_cfg) -> set[str]:
+    """工具所有的 skill 名:live 目录物理真身 ∪ 各 owned_source 声明。"""
+    names = foreign_skill_names(paths, tool_cfg.path)
+    for source in tool_cfg.owned_sources:
+        names |= _names_from_source(paths, source)
     return names
 
 

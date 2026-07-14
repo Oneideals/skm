@@ -121,3 +121,42 @@ def test_sync_boundary_apply_purges_copies_links_and_refs(paths, tool_dir, make_
     assert list(paths.backups.glob("claude-*.json"))
     # config.toml 也快照到 backups(2a)
     assert list(paths.backups.glob("config-*.toml"))
+
+
+def test_owned_skill_names_manifest_and_tree(paths, make_skill, tool_dir, tmp_path):
+    nat = tool_dir / "native"
+    nat.mkdir()
+    (nat / "SKILL.md").write_text("---\nname: native\n---\n", encoding="utf-8")
+    make_skill("mine")
+    linker.create_link(paths, tool_dir, "mine")
+    manifest = tmp_path / "managed.json"
+    manifest.write_text('{"webby": {"owner": "x"}}', encoding="utf-8")
+    shipped = tmp_path / "bundle" / "cat" / "shipped"
+    shipped.mkdir(parents=True)
+    (shipped / "SKILL.md").write_text("---\nname: shipped\n---\n", encoding="utf-8")
+    tc = ToolCfg(path=tool_dir, owned_sources=[manifest, tmp_path / "bundle"])
+    names = boundary.owned_skill_names(paths, tc)
+    assert {"native", "webby", "shipped"} <= names
+    assert "mine" not in names                      # skm 链不算工具所有
+
+
+def test_owned_skill_names_manifest_array(paths, tool_dir, tmp_path):
+    m = tmp_path / "list.json"
+    m.write_text('["a", "b"]', encoding="utf-8")
+    tc = ToolCfg(path=tool_dir, owned_sources=[m])
+    assert {"a", "b"} <= boundary.owned_skill_names(paths, tc)
+
+
+def test_owned_skill_names_missing_source_skipped(paths, tool_dir, tmp_path):
+    tc = ToolCfg(path=tool_dir,
+                 owned_sources=[tmp_path / "nope.json", tmp_path / "nodir"])
+    assert boundary.owned_skill_names(paths, tc) == set()
+
+
+def test_owned_source_dir_excludes_skm_links(paths, make_skill, tmp_path):
+    faux_live = tmp_path / "live"
+    faux_live.mkdir()
+    make_skill("mine")
+    linker.create_link(paths, faux_live, "mine")
+    tc = ToolCfg(path=tmp_path / "none", owned_sources=[faux_live])
+    assert "mine" not in boundary.owned_skill_names(paths, tc)
