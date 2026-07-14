@@ -118,7 +118,7 @@ def prune_collisions(paths: Paths, cfg: Config, apply: bool = False) -> PruneRep
 def _tool_owned_names(paths: Paths, cfg: Config) -> set[str]:
     owned: set[str] = set()
     for tc in cfg.tools.values():
-        owned |= foreign_skill_names(paths, tc.path)
+        owned |= owned_skill_names(paths, tc)
     return owned
 
 

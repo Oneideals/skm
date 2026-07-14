@@ -160,3 +160,14 @@ def test_owned_source_dir_excludes_skm_links(paths, make_skill, tmp_path):
     linker.create_link(paths, faux_live, "mine")
     tc = ToolCfg(path=tmp_path / "none", owned_sources=[faux_live])
     assert "mine" not in boundary.owned_skill_names(paths, tc)
+
+
+def test_purge_candidates_via_owned_source(paths, make_skill, tool_dir, tmp_path):
+    make_skill("webby")                     # 中央仓有 webby
+    manifest = tmp_path / "managed.json"
+    manifest.write_text('{"webby": {}}', encoding="utf-8")
+    cfg = load_config(paths)
+    cfg.tools = {"hermes": ToolCfg(path=tool_dir, owned_sources=[manifest])}
+    save_config(paths, cfg)
+    # tool_dir 里没有 webby 的物理真身,仅清单声明 → 仍应被判为工具血统
+    assert "webby" in boundary.purge_candidates(paths, cfg)
