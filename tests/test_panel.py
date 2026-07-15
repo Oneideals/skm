@@ -93,3 +93,39 @@ def test_apply_rejects_tool_selecting_unknown_group(paths, make_skill, tool_dir)
                "tools": {"claude": {"skills": [], "groups": ["ghost"]}}}
     with pytest.raises(PanelError, match="ghost"):
         apply_payload(paths, cfg, payload)
+
+
+def test_pool_prefix_family_forms_tree(paths):
+    for n in ["ponytail", "ponytail-audit", "ponytail-debt", "ponytail-help",
+              "grill-me", "grill-with-docs", "karpathy-guidelines"]:
+        _skill(paths, n, f"---\nname: {n}\n---\n")
+    pool = build_state(paths, load_config(paths))["pool"]
+    assert len(pool["collections"]) == 1
+    c = pool["collections"][0]
+    assert c["kind"] == "prefix"
+    assert c["root"]["name"] == "ponytail"
+    assert [m["name"] for m in c["members"]] == \
+        ["ponytail-audit", "ponytail-debt", "ponytail-help"]
+    # grill-* 无 grill 根 → 散装;karpathy 单个 → 散装
+    assert [s["name"] for s in pool["loose"]] == \
+        ["grill-me", "grill-with-docs", "karpathy-guidelines"]
+
+
+def test_pool_covers_every_skill_once(paths):
+    for n in ["a", "a-b", "a-b-c", "x", "x-1", "zzz"]:
+        _skill(paths, n, f"---\nname: {n}\n---\n")
+    pool = build_state(paths, load_config(paths))["pool"]
+    seen = [s["name"] for s in pool["loose"]]
+    for c in pool["collections"]:
+        seen.append(c["root"]["name"])
+        seen += [m["name"] for m in c["members"]]
+    assert sorted(seen) == ["a", "a-b", "a-b-c", "x", "x-1", "zzz"]   # 不丢
+    assert len(seen) == len(set(seen))                               # 不重
+
+
+def test_pool_present_and_skills_flat_unchanged(paths, make_skill):
+    make_skill("solo")
+    st = build_state(paths, load_config(paths))
+    assert [s["name"] for s in st["skills"]] == ["solo"]   # 扁平表不变
+    assert st["pool"]["collections"] == []
+    assert [s["name"] for s in st["pool"]["loose"]] == ["solo"]

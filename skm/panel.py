@@ -62,6 +62,34 @@ def _clean(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _pool_groups(skills: list[dict]) -> dict:
+    """按"命名前缀 + 存在根"把扁平 skill 表分成集合树 + 散装(设计 §3)。"""
+    names = {s["name"] for s in skills}
+    by_name = {s["name"]: s for s in skills}
+    roots = {n for n in names
+             if any(o != n and o.startswith(n + "-") for o in names)}
+    members: dict[str, list[dict]] = {r: [] for r in roots}
+    loose: list[dict] = []
+    for s in sorted(skills, key=lambda x: x["name"]):
+        n = s["name"]
+        if n in roots:
+            continue                       # 根是顶层块,不作更短根的成员
+        owner = ""
+        for r in roots:
+            if n.startswith(r + "-") and len(r) > len(owner):
+                owner = r                  # 最长匹配根 → 规避嵌套双重归属
+        (members[owner] if owner else loose).append(s)
+    collections: list[dict] = []
+    for r in sorted(roots):
+        if members[r]:
+            collections.append({"kind": "prefix", "root": by_name[r],
+                                 "members": members[r]})
+        else:
+            loose.append(by_name[r])       # 空成员的根 → 退化散装
+    loose.sort(key=lambda x: x["name"])
+    return {"collections": collections, "loose": loose}
+
+
 def build_state(paths: Paths, cfg: Config) -> dict:
     skills = []
     if paths.skills.exists():
@@ -71,6 +99,7 @@ def build_state(paths: Paths, cfg: Config) -> dict:
     state = load_state(paths)
     return {
         "skills": skills,
+        "pool": _pool_groups(skills),
         "universal": sorted(cfg.universal),
         "packs": {n: sorted(p.skills) for n, p in sorted(cfg.packs.items())},
         "groups": {
