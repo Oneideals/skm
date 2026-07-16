@@ -144,25 +144,28 @@ function renderPool() {
   const pool = document.getElementById("pool"); pool.innerHTML = "";
   const P = S.pool || {collections:[], loose:S.skills};
   for (const col of P.collections) {
-    const root = col.root;
+    const isPack = col.kind === "pack";
+    const head0 = isPack ? {name: col.name, description: ""} : col.root;
+    const key = isPack ? "pack:" + col.name : col.root.name;
     const memHits = col.members.filter(m => matches(m, q));
-    if (q && !matches(root, q) && !memHits.length) continue;   // 整块无命中 → 隐藏
+    if (q && !matches(head0, q) && !memHits.length) continue;  // 整块无命中 → 隐藏
     const shown = q ? memHits : col.members;
-    const open = q ? true : !collapsed.has(root.name);         // 搜索强制展开
+    const open = q ? true : !collapsed.has(key);               // 搜索强制展开
     const box = document.createElement("div"); box.className = "collection";
     const head = document.createElement("div"); head.className = "chead";
     const tog = document.createElement("span"); tog.className = "tog";
     tog.textContent = open ? "▾" : "▸";
     tog.addEventListener("click", () => {
-      collapsed.has(root.name) ? collapsed.delete(root.name) : collapsed.add(root.name);
+      collapsed.has(key) ? collapsed.delete(key) : collapsed.add(key);
       renderPool();
     });
     const nm = document.createElement("span"); nm.className = "cname";
-    nm.textContent = `📚 ${root.name}`; nm.draggable = true;
+    nm.textContent = (isPack ? "📦 " : "📚 ") + head0.name; nm.draggable = true;
     nm.addEventListener("dragstart", e =>
-      e.dataTransfer.setData("text/plain", JSON.stringify({kind:"skill", name:root.name})));
+      e.dataTransfer.setData("text/plain", JSON.stringify(
+        {kind: isPack ? "pack" : "skill", name: head0.name})));
     const desc = document.createElement("span"); desc.className = "cdesc";
-    desc.textContent = root.description || "";
+    desc.textContent = head0.description || "";
     const cnt = document.createElement("span"); cnt.className = "ccount";
     cnt.textContent = col.members.length;
     head.append(tog, nm, desc, cnt); box.appendChild(head);
@@ -184,13 +187,14 @@ function chip(name, onRemove, isPack) {
   return c;
 }
 
-function dropzone(el, arr, kind) {
+function dropzone(el, targets) {          // targets: {kind: 目标数组}
   el.addEventListener("dragover", e => { e.preventDefault(); el.classList.add("drag"); });
   el.addEventListener("dragleave", () => el.classList.remove("drag"));
   el.addEventListener("drop", e => {
     e.preventDefault(); el.classList.remove("drag");
     const it = JSON.parse(e.dataTransfer.getData("text/plain"));
-    if (it.kind !== kind) return;
+    const arr = targets[it.kind];
+    if (!arr) return;
     if (!arr.includes(it.name)) arr.push(it.name);
     renderAll();
   });
@@ -210,7 +214,7 @@ function renderAll() {
   ub.innerHTML = `<div class="bhead"><span class="id">通用层</span><span class="count">${model.universal.length} 个</span></div>`;
   const uchips = document.createElement("div");
   chipsInto(uchips, model.universal, [], s => { model.universal = model.universal.filter(x=>x!==s); renderAll(); }, ()=>{});
-  ub.appendChild(uchips); dropzone(ub, model.universal, "skill"); uni.appendChild(ub);
+  ub.appendChild(uchips); dropzone(ub, {skill: model.universal}); uni.appendChild(ub);
 
   // ② groups
   const gel = document.getElementById("groups"); gel.innerHTML = "";
@@ -233,7 +237,7 @@ function renderAll() {
     chipsInto(chips, g.skills, g.packs,
       s => { g.skills = g.skills.filter(x=>x!==s); renderAll(); },
       p => { g.packs = g.packs.filter(x=>x!==p); renderAll(); });
-    b.appendChild(chips); dropzone(b, g.skills, "skill"); gel.appendChild(b);
+    b.appendChild(chips); dropzone(b, {skill: g.skills, pack: g.packs}); gel.appendChild(b);
   }
 
   // ③ tools
@@ -268,7 +272,7 @@ function renderAll() {
     b.appendChild(sl2);
     const chips = document.createElement("div");
     chipsInto(chips, tc.skills, [], s => { tc.skills = tc.skills.filter(x=>x!==s); renderAll(); }, ()=>{});
-    b.appendChild(chips); dropzone(b, tc.skills, "skill"); tel.appendChild(b);
+    b.appendChild(chips); dropzone(b, {skill: tc.skills}); tel.appendChild(b);
   }
 }
 
