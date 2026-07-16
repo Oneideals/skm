@@ -3,3 +3,7 @@ __pycache__/
 .pytest_cache/
 .superpowers/
 .venv/
+
+# Agent handoff (local state, do not commit)
+.agent-handoff.md
+.agent-handoff/
