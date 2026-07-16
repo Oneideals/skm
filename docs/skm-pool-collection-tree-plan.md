@@ -288,3 +288,37 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Run tests with `.venv/bin/python -m pytest`.
 - Task 1 is pure Python/TDD. Task 2 is UI — its "test" is the running panel + screenshot (Step 4); there is no pytest for `panel.html`.
 - The panel server on 8790 is a detached process; Task 2 Step 3 restarts it to pick up the new HTML.
+
+---
+
+# Part B addendum — pack blocks (spec §2/§3 updated 2026-07-15)
+
+### Task 3: `build_state` — pack collections claim before prefix
+
+**Files:**
+- Modify: `skm/panel.py` (`_pool_groups(skills, packs)`)
+- Test: `tests/test_panel.py`
+
+**Interfaces:**
+- Consumes: the `packs` mapping `{name: [skill, …]}` already computed in `build_state`.
+- Produces: `_pool_groups(skills, packs)` — pack blocks first (`{"kind":"pack","name":p,"root":None,"members":[…]}`, pack-name order, claim members, skip names missing from repo, skip empty), then prefix trees on the unclaimed remainder, rest loose. Coverage invariant holds.
+
+- [ ] Step 1: failing tests — pack forms block (root None, sorted members, claimed skills absent from loose); pack beats prefix (family inside a pack → pack block, no prefix tree); two packs share a name → alphabetically-first pack claims, appears once; pack referencing absent skills → ignored / empty pack no block; coverage invariant incl. packs.
+- [ ] Step 2: run, expect FAIL.
+- [ ] Step 3: implement — extract prefix logic to `_prefix_groups(skills)`; new `_pool_groups(skills, packs)` does pack claiming then delegates remainder; `build_state` passes its `packs` dict.
+- [ ] Step 4: panel tests + full suite PASS.
+- [ ] Step 5: commit `feat: pool pack blocks claim members before prefix trees`.
+
+### Task 4: `panel.html` — 📦 pack blocks + drag pack into group
+
+**Files:**
+- Modify: `skm/panel.html` (`renderPool` pack-header branch; `dropzone` accepts `{kind: array}` map; group buckets accept pack drops)
+
+**Interfaces:**
+- Consumes: `S.pool.collections` entries with `kind:"pack"`, `name`, `root:null`.
+- Produces: pack block header `📦 <name>` draggable with payload `{kind:"pack", name}`; `dropzone(el, {skill: arr, pack: arr2})`; group buckets pass `{skill: g.skills, pack: g.packs}`; universal/tool buckets `{skill: …}` only. Search matches pack name or members.
+
+- [ ] Step 1: implement render branch + dropzone map + callers.
+- [ ] Step 2: restart panel server (8790), HTTP 200.
+- [ ] Step 3: browser verify — register a temp pack (e.g. via `skm pack create demo --skills grill-me,grill-with-docs`), reload: 📦 demo block (2), collapse/expand, drag header into a group → blue 📦 chip appears, member drag still adds single skill, search by pack name auto-expands. Clean up temp pack after (remove from config).
+- [ ] Step 4: commit `feat: panel pool renders pack blocks; drag pack into group`.
