@@ -129,3 +129,38 @@ def test_pool_present_and_skills_flat_unchanged(paths, make_skill):
     assert [s["name"] for s in st["skills"]] == ["solo"]   # 扁平表不变
     assert st["pool"]["collections"] == []
     assert [s["name"] for s in st["pool"]["loose"]] == ["solo"]
+
+
+def test_pool_pack_block_claims_members(paths, make_skill):
+    for n in ("tdd", "research", "zzz"):
+        make_skill(n)
+    cfg = load_config(paths)
+    cfg.packs["engineering"] = Pack(skills=["tdd", "research", "ghost"])  # ghost 不在仓
+    pool = build_state(paths, cfg)["pool"]
+    assert len(pool["collections"]) == 1
+    c = pool["collections"][0]
+    assert c["kind"] == "pack" and c["name"] == "engineering" and c["root"] is None
+    assert [m["name"] for m in c["members"]] == ["research", "tdd"]   # 排序;ghost 忽略
+    assert [s["name"] for s in pool["loose"]] == ["zzz"]
+
+
+def test_pool_pack_beats_prefix_and_dedups(paths, make_skill):
+    for n in ("ponytail", "ponytail-audit", "ponytail-debt"):
+        make_skill(n)
+    cfg = load_config(paths)
+    cfg.packs["alpha"] = Pack(skills=["ponytail", "ponytail-audit"])
+    cfg.packs["beta"] = Pack(skills=["ponytail-audit"])          # 同名:名序首个认领
+    pool = build_state(paths, cfg)["pool"]
+    kinds = [(c["kind"], c.get("name") or c["root"]["name"]) for c in pool["collections"]]
+    assert ("pack", "alpha") in kinds
+    assert ("pack", "beta") not in kinds                          # 成员被 alpha 抢光 → 无块
+    alpha = next(c for c in pool["collections"] if c["kind"] == "pack")
+    assert [m["name"] for m in alpha["members"]] == ["ponytail", "ponytail-audit"]
+    # 前缀树的根被 pack 认领 → 剩余 ponytail-debt 无根,散装
+    assert all(c["kind"] == "pack" for c in pool["collections"])
+    assert [s["name"] for s in pool["loose"]] == ["ponytail-debt"]
+    # 不丢不重
+    seen = [s["name"] for s in pool["loose"]] + \
+        [m["name"] for c in pool["collections"] for m in c["members"]]
+    assert sorted(seen) == ["ponytail", "ponytail-audit", "ponytail-debt"]
+    assert len(seen) == len(set(seen))

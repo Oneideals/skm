@@ -62,8 +62,26 @@ def _clean(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def _pool_groups(skills: list[dict]) -> dict:
-    """按"命名前缀 + 存在根"把扁平 skill 表分成集合树 + 散装(设计 §3)。"""
+def _pool_groups(skills: list[dict], packs: dict[str, list[str]]) -> dict:
+    """池子分块:pack 认领在先,剩余按"命名前缀 + 存在根"成树,其余散装(设计 §3)。"""
+    by_name = {s["name"]: s for s in skills}
+    claimed: set[str] = set()
+    collections: list[dict] = []
+    for pname in sorted(packs):
+        present = sorted(n for n in packs[pname]
+                         if n in by_name and n not in claimed)
+        if not present:
+            continue                       # pack 成员全缺/被抢 → 不出块
+        collections.append({"kind": "pack", "name": pname, "root": None,
+                            "members": [by_name[n] for n in present]})
+        claimed.update(present)
+    rest = [s for s in skills if s["name"] not in claimed]
+    prefix_cols, loose = _prefix_groups(rest)
+    return {"collections": collections + prefix_cols, "loose": loose}
+
+
+def _prefix_groups(skills: list[dict]) -> tuple[list[dict], list[dict]]:
+    """按"命名前缀 + 存在根"把 skill 表分成前缀树块 + 散装。"""
     names = {s["name"] for s in skills}
     by_name = {s["name"]: s for s in skills}
     roots = {n for n in names
@@ -87,7 +105,7 @@ def _pool_groups(skills: list[dict]) -> dict:
         else:
             loose.append(by_name[r])       # 空成员的根 → 退化散装
     loose.sort(key=lambda x: x["name"])
-    return {"collections": collections, "loose": loose}
+    return collections, loose
 
 
 def build_state(paths: Paths, cfg: Config) -> dict:
@@ -97,11 +115,12 @@ def build_state(paths: Paths, cfg: Config) -> dict:
             if d.is_dir() and (d / "SKILL.md").exists():
                 skills.append({"name": d.name, "description": skill_description(d)})
     state = load_state(paths)
+    packs = {n: sorted(p.skills) for n, p in sorted(cfg.packs.items())}
     return {
         "skills": skills,
-        "pool": _pool_groups(skills),
+        "pool": _pool_groups(skills, packs),
         "universal": sorted(cfg.universal),
-        "packs": {n: sorted(p.skills) for n, p in sorted(cfg.packs.items())},
+        "packs": packs,
         "groups": {
             n: {"label": g.label, "skills": sorted(g.skills), "packs": sorted(g.packs)}
             for n, g in sorted(cfg.groups.items())
