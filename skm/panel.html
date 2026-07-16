@@ -34,6 +34,17 @@
   .skill .name { font-weight:600; }
   .skill .desc { color:var(--muted); font-size:12px; overflow:hidden;
     text-overflow:ellipsis; white-space:nowrap; }
+  .collection { border:1px solid var(--line); border-radius:8px; margin-bottom:6px;
+    background:var(--panel2); overflow:hidden; }
+  .chead { display:flex; align-items:center; gap:6px; padding:6px 8px; }
+  .chead .tog { cursor:pointer; color:var(--muted); width:12px; user-select:none; }
+  .chead .cname { font-weight:700; cursor:grab; white-space:nowrap; }
+  .chead .cdesc { color:var(--muted); font-size:12px; flex:1; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+  .chead .ccount { color:var(--muted); font-size:12px; background:var(--chip);
+    border-radius:20px; padding:0 8px; }
+  .cbody { padding:2px 6px 6px 22px; }
+  .skill.member { padding:5px 8px; }
   .sec { margin-bottom:20px; }
   .bucket { background:var(--panel); border:1px solid var(--line); border-radius:10px;
     padding:11px 12px; margin-bottom:10px; }
@@ -98,6 +109,24 @@
 <div id="toast"></div>
 <script>
 let S = null, model = null;
+const collapsed = new Set();
+
+function matches(s, q) {
+  return !q || s.name.toLowerCase().includes(q) ||
+         (s.description || "").toLowerCase().includes(q);
+}
+
+function skillRow(s, member) {
+  const d = document.createElement("div");
+  d.className = "skill" + (member ? " member" : "");
+  d.draggable = true;
+  if (member) { d.title = s.description || "";
+    d.innerHTML = `<div class="name">${s.name}</div>`; }
+  else d.innerHTML = `<div class="name">${s.name}</div><div class="desc">${s.description||""}</div>`;
+  d.addEventListener("dragstart", e =>
+    e.dataTransfer.setData("text/plain", JSON.stringify({kind:"skill", name:s.name})));
+  return d;
+}
 
 async function load() {
   S = await (await fetch("/api/state")).json();
@@ -113,15 +142,38 @@ async function load() {
 function renderPool() {
   const q = (document.getElementById("search").value||"").toLowerCase();
   const pool = document.getElementById("pool"); pool.innerHTML = "";
-  for (const s of S.skills) {
-    if (q && !(s.name.toLowerCase().includes(q) || (s.description||"").toLowerCase().includes(q))) continue;
-    const d = document.createElement("div");
-    d.className = "skill"; d.draggable = true;
-    d.innerHTML = `<div class="name">${s.name}</div><div class="desc">${s.description||""}</div>`;
-    d.addEventListener("dragstart", e =>
-      e.dataTransfer.setData("text/plain", JSON.stringify({kind:"skill", name:s.name})));
-    pool.appendChild(d);
+  const P = S.pool || {collections:[], loose:S.skills};
+  for (const col of P.collections) {
+    const root = col.root;
+    const memHits = col.members.filter(m => matches(m, q));
+    if (q && !matches(root, q) && !memHits.length) continue;   // 整块无命中 → 隐藏
+    const shown = q ? memHits : col.members;
+    const open = q ? true : !collapsed.has(root.name);         // 搜索强制展开
+    const box = document.createElement("div"); box.className = "collection";
+    const head = document.createElement("div"); head.className = "chead";
+    const tog = document.createElement("span"); tog.className = "tog";
+    tog.textContent = open ? "▾" : "▸";
+    tog.addEventListener("click", () => {
+      collapsed.has(root.name) ? collapsed.delete(root.name) : collapsed.add(root.name);
+      renderPool();
+    });
+    const nm = document.createElement("span"); nm.className = "cname";
+    nm.textContent = `📚 ${root.name}`; nm.draggable = true;
+    nm.addEventListener("dragstart", e =>
+      e.dataTransfer.setData("text/plain", JSON.stringify({kind:"skill", name:root.name})));
+    const desc = document.createElement("span"); desc.className = "cdesc";
+    desc.textContent = root.description || "";
+    const cnt = document.createElement("span"); cnt.className = "ccount";
+    cnt.textContent = col.members.length;
+    head.append(tog, nm, desc, cnt); box.appendChild(head);
+    if (open) {
+      const body = document.createElement("div"); body.className = "cbody";
+      for (const m of shown) body.appendChild(skillRow(m, true));
+      box.appendChild(body);
+    }
+    pool.appendChild(box);
   }
+  for (const s of P.loose) if (matches(s, q)) pool.appendChild(skillRow(s, false));
 }
 
 function chip(name, onRemove, isPack) {
