@@ -112,8 +112,16 @@ def upgrade_source(paths: Paths, cfg: Config, url: str) -> ImportReport:
     if not group:
         raise ImporterError(f"没有 source 为 {url} 的 pack")
     anchor = next((p for p in group.values() if p.base), None)
-    base = anchor.base if anchor else sorted(group)[0]
-    split = anchor.split if anchor else False
+    if anchor:
+        base, split = anchor.base, anchor.split
+    elif len(group) == 1:
+        base, split = next(iter(group)), False        # 整仓单 pack 导入的存量
+    else:
+        # 存量多 pack 同源(二期前的 --split-by-dir 产物):推断为 split,
+        # base = pack 名公共前缀(matt-engineering/matt-misc… → matt)
+        import os.path
+        common = os.path.commonprefix(sorted(group)).rstrip("-")
+        base, split = (common or sorted(group)[0]), True
     old_lists = {n: list(p.skills) for n, p in group.items()}
 
     rep = import_repo(paths, cfg, url, name=base, split_by_dir=split, force=True)

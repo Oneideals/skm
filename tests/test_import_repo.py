@@ -124,3 +124,23 @@ def test_upgrade_by_pack_delegates_to_source(paths, repo):
     assert "beta" in cfg2.packs["mp-engineering"].skills       # 不串包(split 修复)
     assert "alpha" not in cfg2.packs["mp-engineering"].skills  # 整仓不灌进单 pack
     assert cfg2.packs["mp"].skills == ["alpha"]
+
+
+def test_upgrade_legacy_split_packs_without_base(paths, repo):
+    """存量 pack(二期前导入,无 base/split 记录):多 pack 同源 → 必须推断为 split。"""
+    from skm.config import Pack, save_config
+    from skm.importer import upgrade_source
+    cfg = load_config(paths)
+    # 模拟旧版 import --split-by-dir 的产物:有 source、无 commit/base/split
+    cfg.packs["mp"] = Pack(skills=["alpha"], source=str(repo))
+    cfg.packs["mp-engineering"] = Pack(skills=["beta"], source=str(repo))
+    save_config(paths, cfg)
+    cfg = load_config(paths)
+
+    rep = upgrade_source(paths, cfg, str(repo))
+
+    cfg2 = load_config(paths)
+    assert cfg2.packs["mp"].skills == ["alpha"]                # 不被清空
+    assert cfg2.packs["mp-engineering"].skills == ["beta"]     # 不被灌成整仓
+    assert rep.dropped == []
+    assert cfg2.packs["mp"].split is True and cfg2.packs["mp"].base == "mp"
