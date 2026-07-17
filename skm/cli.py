@@ -133,7 +133,11 @@ def _cmd_pack_create(paths: Paths, cfg: Config, args) -> int:
 
 def _cmd_upgrade(paths: Paths, cfg: Config, args) -> int:
     rep = importer.upgrade(paths, cfg, args.pack)
-    print(f"pack {args.pack} 已升级:更新 {len(rep.installed)} 个 skill")
+    print(f"已按 source 升级(同仓 pack 一起刷新):更新 {len(rep.installed)} 个 skill")
+    for pname, skills in sorted(rep.packs.items()):
+        print(f"  pack {pname}: {len(skills)} 个")
+    if rep.dropped:
+        print(f"  从 pack 摘除(真身保留): {', '.join(rep.dropped)}")
     return 0
 
 

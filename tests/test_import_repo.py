@@ -82,3 +82,45 @@ def test_upgrade_without_source_raises(paths):
     cfg = load_config(paths)
     with pytest.raises(ImporterError):
         upgrade(paths, cfg, "ghost")
+
+
+def test_upgrade_source_split_safe_and_fresh(paths, repo):
+    import shutil
+
+    from skm.importer import upgrade_source
+    cfg = load_config(paths)
+    import_repo(paths, cfg, str(repo), name="mp", split_by_dir=True)
+    # 上游:alpha 删除,engineering 新增 gamma
+    shutil.rmtree(repo / "skills" / "alpha")
+    g = repo / "skills" / "engineering" / "gamma"
+    g.mkdir()
+    (g / "SKILL.md").write_text("---\nname: gamma\n---\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "v2")
+
+    cfg = load_config(paths)
+    rep = upgrade_source(paths, cfg, str(repo))
+
+    cfg2 = load_config(paths)
+    assert cfg2.packs["mp"].skills == []                       # alpha 上游已删 → fresh 名单为空
+    assert cfg2.packs["mp-engineering"].skills == ["beta", "gamma"]
+    assert "mp/alpha" in rep.dropped
+    assert (paths.skills / "alpha" / "SKILL.md").exists()      # 真身保留(变散装)
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
+                          capture_output=True, text=True).stdout.strip()
+    assert cfg2.packs["mp-engineering"].commit == head
+
+
+def test_upgrade_by_pack_delegates_to_source(paths, repo):
+    cfg = load_config(paths)
+    import_repo(paths, cfg, str(repo), name="mp", split_by_dir=True)
+    (repo / "skills" / "alpha" / "SKILL.md").write_text("v2", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "v2")
+    cfg = load_config(paths)
+    upgrade(paths, cfg, "mp-engineering")                      # 升级任一兄弟 pack
+    assert (paths.skills / "alpha" / "SKILL.md").read_text(encoding="utf-8") == "v2"
+    cfg2 = load_config(paths)
+    assert "beta" in cfg2.packs["mp-engineering"].skills       # 不串包(split 修复)
+    assert "alpha" not in cfg2.packs["mp-engineering"].skills  # 整仓不灌进单 pack
+    assert cfg2.packs["mp"].skills == ["alpha"]

@@ -106,8 +106,30 @@ def import_repo(paths: Paths, cfg: Config, url: str, name: str | None = None,
     return rep
 
 
+def upgrade_source(paths: Paths, cfg: Config, url: str) -> ImportReport:
+    """按 source 仓升级:一次克隆刷新该 url 的全部 pack(fresh 名单,split 安全)。"""
+    group = {n: p for n, p in cfg.packs.items() if p.source == url}
+    if not group:
+        raise ImporterError(f"没有 source 为 {url} 的 pack")
+    anchor = next((p for p in group.values() if p.base), None)
+    base = anchor.base if anchor else sorted(group)[0]
+    split = anchor.split if anchor else False
+    old_lists = {n: list(p.skills) for n, p in group.items()}
+
+    rep = import_repo(paths, cfg, url, name=base, split_by_dir=split, force=True)
+
+    # fresh 名单:覆盖 import_repo 的 old∪new 合并;上游消失的从 pack 摘除
+    for pname, old in old_lists.items():
+        fresh = rep.packs.get(pname, [])
+        cfg.packs[pname] = Pack(skills=sorted(fresh), source=url,
+                                commit=rep.commit, base=base, split=split)
+        rep.dropped += [f"{pname}/{s}" for s in sorted(set(old) - set(fresh))]
+    save_config(paths, cfg)
+    return rep
+
+
 def upgrade(paths: Paths, cfg: Config, pack_name: str) -> ImportReport:
     p = cfg.packs.get(pack_name)
     if p is None or not p.source:
         raise ImporterError(f"pack '{pack_name}' 不存在或没有 source,无法升级")
-    return import_repo(paths, cfg, p.source, name=pack_name, force=True)
+    return upgrade_source(paths, cfg, p.source)
