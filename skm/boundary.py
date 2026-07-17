@@ -123,15 +123,21 @@ def _tool_owned_names(paths: Paths, cfg: Config) -> set[str]:
 
 
 def purge_candidates(paths: Paths, cfg: Config) -> set[str]:
-    """中央仓里其实是某工具自带冗余副本的 skill id(name 命中任一工具外来集合)。"""
+    """中央仓里其实是某工具自带冗余副本的 skill id(name 命中任一工具外来集合)。
+
+    豁免:有独立上游溯源的 skill(属于带 source+commit 的 pack)——skm 知道
+    它来自真实上游而非工具的野副本,同名只是工具 vendor 了同一上游。
+    """
     if not paths.skills.exists():
         return set()
     owned = _tool_owned_names(paths, cfg)
+    tracked = {s for p in cfg.packs.values()
+               if p.source and p.commit for s in p.skills}
     out: set[str] = set()
     for d in sorted(paths.skills.iterdir()):
         smd = d / "SKILL.md"
         if d.is_dir() and not d.is_symlink() and smd.exists():
-            if skill_name(smd) in owned:
+            if skill_name(smd) in owned and d.name not in tracked:
                 out.add(d.name)
     return out
 

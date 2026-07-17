@@ -173,6 +173,23 @@ def test_purge_candidates_via_owned_source(paths, make_skill, tool_dir, tmp_path
     assert "webby" in boundary.purge_candidates(paths, cfg)
 
 
+def test_purge_exempts_tracked_provenance(paths, make_skill, tool_dir, tmp_path):
+    """有独立上游溯源(pack 带 source+commit)的 skill 不算血统残留。"""
+    from skm.config import Pack
+    make_skill("tdd-x")
+    manifest = tmp_path / "managed.json"
+    manifest.write_text('{"tdd-x": {}}', encoding="utf-8")   # 工具声称拥有同名
+    cfg = load_config(paths)
+    cfg.tools = {"hermes": ToolCfg(path=tool_dir, owned_sources=[manifest])}
+    cfg.packs["sp"] = Pack(skills=["tdd-x"], source="https://real/upstream",
+                           commit="abc123")
+    save_config(paths, cfg)
+    assert "tdd-x" not in boundary.purge_candidates(paths, cfg)
+    # 溯源不完整(无 commit)→ 不豁免
+    cfg.packs["sp"].commit = None
+    assert "tdd-x" in boundary.purge_candidates(paths, cfg)
+
+
 def test_sync_apply_handoff_when_no_native(paths, make_skill, tool_dir, tmp_path):
     from skm.state import ToolState, save_state
     make_skill("webby")
