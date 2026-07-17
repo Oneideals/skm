@@ -4,6 +4,9 @@ __pycache__/
 .superpowers/
 .venv/
 
-# Agent handoff (local state, do not commit)
+# Agent baton (local state, do not commit)
+.agent-baton.md
+.agent-baton/
+# legacy names (compat)
 .agent-handoff.md
 .agent-handoff/
