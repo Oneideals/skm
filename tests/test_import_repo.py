@@ -41,6 +41,18 @@ def test_import_split_by_dir(paths, repo):
     assert rep.packs == {"mp": ["alpha"], "mp-engineering": ["beta"]}
 
 
+def test_import_records_commit_base_split(paths, repo):
+    cfg = load_config(paths)
+    rep = import_repo(paths, cfg, str(repo), name="mp", split_by_dir=True)
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
+                          capture_output=True, text=True).stdout.strip()
+    assert rep.commit == head
+    cfg2 = load_config(paths)
+    for pname in ("mp", "mp-engineering"):
+        p = cfg2.packs[pname]
+        assert p.commit == head and p.base == "mp" and p.split is True
+
+
 def test_import_no_skills_raises(paths, tmp_path):
     r = tmp_path / "empty"
     r.mkdir()

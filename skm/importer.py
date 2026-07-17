@@ -23,6 +23,8 @@ class ImportReport:
     installed: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     packs: dict[str, list[str]] = field(default_factory=dict)
+    commit: str | None = None
+    dropped: list[str] = field(default_factory=list)   # 升级时从 pack 摘除的
 
 
 def find_skill_dirs(root: Path) -> list[Path]:
@@ -81,6 +83,9 @@ def import_repo(paths: Paths, cfg: Config, url: str, name: str | None = None,
         if proc.returncode != 0:
             raise ImporterError(f"git clone 失败: {proc.stderr.strip()[:300]}")
         root = Path(clone_dir)
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=clone_dir,
+                              capture_output=True, text=True).stdout.strip()
+        rep.commit = head or None
         dirs = find_skill_dirs(root)
         if not dirs:
             raise ImporterError("仓库里没找到任何 SKILL.md,不建 pack")
@@ -95,7 +100,8 @@ def import_repo(paths: Paths, cfg: Config, url: str, name: str | None = None,
         rep.packs[pname] = sorted(set(rep.packs[pname]))
         old = cfg.packs.get(pname)
         merged = sorted(set(rep.packs[pname]) | set(old.skills if old else []))
-        cfg.packs[pname] = Pack(skills=merged, source=url)
+        cfg.packs[pname] = Pack(skills=merged, source=url, commit=rep.commit,
+                                base=base, split=split_by_dir)
     save_config(paths, cfg)
     return rep
 
