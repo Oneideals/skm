@@ -97,3 +97,42 @@ def test_doctor_flags_missing_owned_source(paths, tool_dir, tmp_path):
     save_config(paths, cfg)
     problems = cli.doctor(paths, cfg)
     assert any("owned_source 路径不存在" in p for p in problems)
+
+
+def test_outdated_command_lists_states(paths, tmp_path, monkeypatch, capsys):
+    import subprocess
+
+    from skm.config import Pack
+    monkeypatch.setenv("SKM_HOME", str(paths.home))
+    r = tmp_path / "up"
+    d = r / "sk"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text("---\nname: sk\n---\n", encoding="utf-8")
+    for a in (("init", "-q"), ("add", "-A"),
+              ("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "i")):
+        subprocess.run(["git", *a], cwd=r, check=True, capture_output=True)
+    cfg = load_config(paths)
+    cfg.packs["p1"] = Pack(skills=["sk"], source=str(r), commit="oldhash")
+    cfg.packs["p2"] = Pack(skills=[], source="https://no/net")   # 无 commit → untracked
+    save_config(paths, cfg)
+    rc = main(["outdated", "--force"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "可更新" in out and "p1" in out
+    assert "未追踪" in out and "p2" in out
+
+
+def test_doctor_hints_outdated_from_cache_only(paths, monkeypatch, capsys):
+    import json
+
+    from skm.config import Pack
+    monkeypatch.setenv("SKM_HOME", str(paths.home))
+    cfg = load_config(paths)
+    cfg.packs["p1"] = Pack(skills=[], source="https://x/y", commit="aaa")
+    save_config(paths, cfg)
+    (paths.home / "cache-upstream.json").write_text(
+        json.dumps({"https://x/y": {"head": "bbb", "checked_at": 9e12}}))
+    rc = main(["doctor"])
+    out = capsys.readouterr().out
+    assert rc == 0                                # 更新提示不算健康问题
+    assert "上游更新" in out

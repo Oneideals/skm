@@ -5,7 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import boundary, importer, linker, switcher
+from . import boundary, importer, linker, switcher, upstream
 from . import panel as _panel
 from .config import (ID_RE, Config, ConfigError, Pack, load_config,
                      missing_in_repo, save_config)
@@ -141,6 +141,25 @@ def _cmd_upgrade(paths: Paths, cfg: Config, args) -> int:
     return 0
 
 
+_STATUS_LABEL = {"up-to-date": "✓ 最新", "outdated": "⬆ 可更新",
+                 "untracked": "· 未追踪(upgrade 一次开始追踪)",
+                 "unreachable": "⚠ 无法访问"}
+
+
+def _cmd_outdated(paths: Paths, cfg: Config, args) -> int:
+    rep = upstream.outdated_report(paths, cfg, force=args.force)
+    if not rep:
+        print("(没有带 source 的 pack,无可检查项)")
+        return 0
+    for url, r in sorted(rep.items()):
+        print(f"{_STATUS_LABEL[r['status']]}  {url}")
+        print(f"    packs: {', '.join(r['packs'])}")
+        if r["status"] == "outdated":
+            print(f"    本地 {str(r['local'])[:9]} → 远端 {str(r['remote'])[:9]}"
+                  f";应用: skm upgrade {r['packs'][0]}")
+    return 0
+
+
 def doctor(paths: Paths, cfg: Config) -> list[str]:
     problems: list[str] = []
     referenced = set(cfg.universal)
@@ -200,10 +219,18 @@ def _cmd_doctor(paths: Paths, cfg: Config, args) -> int:
     problems = doctor(paths, cfg)
     if not problems:
         print("✓ 无问题")
-        return 0
-    for p in problems:
-        print(f"✗ {p}")
-    return 1
+    else:
+        for p in problems:
+            print(f"✗ {p}")
+    # 上游更新提示:只读缓存,不发网络,不影响退出码
+    snap = upstream.cache_snapshot(paths)
+    for url in sorted({p.source for p in cfg.packs.values()
+                       if p.source and p.commit}):
+        local = next(p.commit for p in cfg.packs.values()
+                     if p.source == url and p.commit)
+        if snap.get(url) and snap[url] != local:
+            print(f"ℹ 有上游更新(skm outdated 查看 / skm upgrade 应用): {url}")
+    return 1 if problems else 0
 
 
 def _cmd_prune_collisions(paths: Paths, cfg: Config, args) -> int:
@@ -295,6 +322,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("upgrade", help="按 source 升级 pack")
     p.add_argument("pack")
     p.set_defaults(fn=_cmd_upgrade)
+
+    p = sub.add_parser("outdated", help="检查各 pack 上游是否有更新(带 24h 缓存)")
+    p.add_argument("--force", action="store_true", help="绕过缓存强制检查")
+    p.set_defaults(fn=_cmd_outdated)
 
     sub.add_parser("doctor", help="健康检查").set_defaults(fn=_cmd_doctor)
 
