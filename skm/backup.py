@@ -94,8 +94,18 @@ def restore(paths: Paths, url: str, force: bool = False) -> dict:
         for child in list(paths.home.iterdir()):
             shutil.move(str(child), str(safety / child.name))
     paths.home.mkdir(parents=True, exist_ok=True)
-    clone = subprocess.run(["git", "clone", "-q", url, str(paths.home)],
-                           capture_output=True, text=True)
+
+    def _clone(*extra: str):
+        for child in list(paths.home.iterdir()):   # 两次尝试间清空残留
+            shutil.rmtree(child) if child.is_dir() else child.unlink()
+        return subprocess.run(["git", "clone", "-q", *extra, url, str(paths.home)],
+                              capture_output=True, text=True)
+
+    # skm 备份统一在 main 分支;优先按分支克隆,规避远端 HEAD 指向
+    # 不存在分支(如无 init.defaultBranch 环境下的裸仓)导致的空检出
+    clone = _clone("-b", "main")
+    if clone.returncode != 0:
+        clone = _clone()
     if clone.returncode != 0:
         raise BackupError(f"clone 失败: {clone.stderr.strip()[:300]}")
 

@@ -17,6 +17,9 @@ def bare(tmp_path):
     b = tmp_path / "remote.git"
     subprocess.run(["git", "init", "-q", "--bare", str(b)], check=True,
                    capture_output=True)
+    # 模拟 CI/无 init.defaultBranch 环境:裸仓 HEAD 指向 master(而 skm 只推 main)
+    subprocess.run(["git", "-C", str(b), "symbolic-ref", "HEAD",
+                    "refs/heads/master"], check=True, capture_output=True)
     return b
 
 
