@@ -40,6 +40,9 @@ class ToolCfg:
 class Pack:
     skills: list[str] = field(default_factory=list)
     source: str | None = None
+    commit: str | None = None    # 安装时上游 HEAD hash(更新检测锚点)
+    base: str | None = None      # import 时的 --name base(升级复现用)
+    split: bool = False          # import 时是否 --split-by-dir
 
 
 @dataclass
@@ -92,7 +95,11 @@ def load_config(paths: Paths) -> Config:
     packs: dict[str, Pack] = {}
     for name, body in raw.get("packs", {}).items():
         _check_id("pack", name)
-        packs[name] = Pack(skills=list(body.get("skills", [])), source=body.get("source"))
+        packs[name] = Pack(skills=list(body.get("skills", [])),
+                           source=body.get("source"),
+                           commit=body.get("commit"),
+                           base=body.get("base"),
+                           split=bool(body.get("split", False)))
     groups: dict[str, Group] = {}
     for name, body in raw.get("groups", {}).items():
         _check_id("group", name)
@@ -133,6 +140,12 @@ def save_config(paths: Paths, cfg: Config) -> None:
         lines += ["", f"[packs.{name}]", f"skills = {_toml_list(sorted(p.skills))}"]
         if p.source:
             lines.append(f"source = {_toml_str(p.source)}")
+        if p.commit:
+            lines.append(f"commit = {_toml_str(p.commit)}")
+        if p.base:
+            lines.append(f"base = {_toml_str(p.base)}")
+        if p.split:
+            lines.append("split = true")
     for name in sorted(cfg.groups):
         g = cfg.groups[name]
         lines += ["", f"[groups.{name}]"]

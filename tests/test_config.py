@@ -97,3 +97,16 @@ def test_owned_sources_roundtrip(paths, tmp_path):
 def test_owned_sources_default_empty(paths):
     cfg = load_config(paths)
     assert all(tc.owned_sources == [] for tc in cfg.tools.values())
+
+
+def test_pack_upstream_fields_roundtrip(paths):
+    cfg = load_config(paths)
+    cfg.packs["mp"] = Pack(skills=["a"], source="https://x/y",
+                           commit="abc123", base="mp", split=True)
+    cfg.packs["plain"] = Pack(skills=["b"])
+    save_config(paths, cfg)
+    got = load_config(paths)
+    p = got.packs["mp"]
+    assert (p.commit, p.base, p.split) == ("abc123", "mp", True)
+    q = got.packs["plain"]
+    assert (q.commit, q.base, q.split) == (None, None, False)
