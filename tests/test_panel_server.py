@@ -62,3 +62,45 @@ def test_server_end_to_end(paths, make_skill, tmp_path):
     finally:
         httpd.shutdown()
         httpd.server_close()
+
+
+def test_api_outdated_and_upgrade(paths, tmp_path):
+    import subprocess
+
+    from skm.importer import import_repo
+    r = tmp_path / "up"
+    d = r / "skills" / "s1"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text("---\nname: s1\n---\n", encoding="utf-8")
+    for a in (("init", "-q"), ("add", "-A"),
+              ("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "i")):
+        subprocess.run(["git", *a], cwd=r, check=True, capture_output=True)
+    cfg = load_config(paths)
+    import_repo(paths, cfg, str(r), name="pp")
+    # 上游前进一格
+    (d / "SKILL.md").write_text("---\nname: s1\n---\nv2\n", encoding="utf-8")
+    for a in (("add", "-A"),
+              ("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "v2")):
+        subprocess.run(["git", *a], cwd=r, check=True, capture_output=True)
+
+    httpd, port = _serve(paths)
+    try:
+        status, body = _req(port, "GET", "/api/outdated?force=1")
+        assert status == 200
+        rep = json.loads(body)
+        assert rep[str(r)]["status"] == "outdated"
+
+        status, body = _req(port, "POST", "/api/upgrade", {"url": str(r)})
+        assert status == 200
+        out = json.loads(body)
+        assert out["ok"] is True and out["installed"] == 1 and "pp" in out["packs"]
+
+        status, body = _req(port, "GET", "/api/outdated?force=1")
+        assert json.loads(body)[str(r)]["status"] == "up-to-date"
+
+        # 未知 url → 400
+        status, body = _req(port, "POST", "/api/upgrade", {"url": "https://no/such"})
+        assert status == 400
+    finally:
+        httpd.shutdown()
+        httpd.server_close()

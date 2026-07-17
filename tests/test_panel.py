@@ -155,12 +155,29 @@ def test_pool_pack_beats_prefix_and_dedups(paths, make_skill):
     assert ("pack", "alpha") in kinds
     assert ("pack", "beta") not in kinds                          # 成员被 alpha 抢光 → 无块
     alpha = next(c for c in pool["collections"] if c["kind"] == "pack")
-    assert [m["name"] for m in alpha["members"]] == ["ponytail", "ponytail-audit"]
+    # 前缀感知:成员构成 ponytail 家族 → 根提出来
+    assert alpha["root"]["name"] == "ponytail"
+    assert [m["name"] for m in alpha["members"]] == ["ponytail-audit"]
     # 前缀树的根被 pack 认领 → 剩余 ponytail-debt 无根,散装
     assert all(c["kind"] == "pack" for c in pool["collections"])
     assert [s["name"] for s in pool["loose"]] == ["ponytail-debt"]
-    # 不丢不重
-    seen = [s["name"] for s in pool["loose"]] + \
-        [m["name"] for c in pool["collections"] for m in c["members"]]
+    # 不丢不重(pack 的非空 root 也计入)
+    seen = [s["name"] for s in pool["loose"]]
+    for c in pool["collections"]:
+        if c["root"]:
+            seen.append(c["root"]["name"])
+        seen += [m["name"] for m in c["members"]]
     assert sorted(seen) == ["ponytail", "ponytail-audit", "ponytail-debt"]
     assert len(seen) == len(set(seen))
+
+
+def test_pool_pack_prefix_aware_root(paths, make_skill):
+    for n in ("pt", "pt-a", "pt-b", "solo"):
+        make_skill(n)
+    cfg = load_config(paths)
+    cfg.packs["ptpack"] = Pack(skills=["pt", "pt-a", "pt-b"])
+    pool = build_state(paths, cfg)["pool"]
+    c = pool["collections"][0]
+    assert c["kind"] == "pack" and c["name"] == "ptpack"
+    assert c["root"]["name"] == "pt"                       # 前缀感知:根提出来
+    assert [m["name"] for m in c["members"]] == ["pt-a", "pt-b"]

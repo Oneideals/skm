@@ -72,8 +72,15 @@ def _pool_groups(skills: list[dict], packs: dict[str, list[str]]) -> dict:
                          if n in by_name and n not in claimed)
         if not present:
             continue                       # pack 成员全缺/被抢 → 不出块
-        collections.append({"kind": "pack", "name": pname, "root": None,
-                            "members": [by_name[n] for n in present]})
+        members = [by_name[n] for n in present]
+        root = None
+        for cand in members:
+            rest = [m for m in members if m is not cand]
+            if rest and all(m["name"].startswith(cand["name"] + "-") for m in rest):
+                root, members = cand, rest   # 前缀感知:pack 内构成家族则提根
+                break
+        collections.append({"kind": "pack", "name": pname, "root": root,
+                            "members": members})
         claimed.update(present)
     rest = [s for s in skills if s["name"] not in claimed]
     prefix_cols, loose = _prefix_groups(rest)
@@ -218,10 +225,33 @@ def _make_handler(paths: Paths):
                 cfg = load_config(paths)
                 self._send(200, json.dumps(build_state(paths, cfg), ensure_ascii=False),
                            "application/json; charset=utf-8")
+            elif self.path.startswith("/api/outdated"):
+                from . import upstream
+                cfg = load_config(paths)
+                query = (self.path.split("?", 1) + [""])[1]
+                rep = upstream.outdated_report(paths, cfg, force="force=1" in query)
+                self._send(200, json.dumps(rep, ensure_ascii=False),
+                           "application/json; charset=utf-8")
             else:
                 self._send(404, json.dumps({"error": "not found"}), "application/json")
 
         def do_POST(self):
+            if self.path == "/api/upgrade":
+                from . import importer, upstream
+                length = int(self.headers.get("Content-Length", 0))
+                try:
+                    payload = json.loads(self.rfile.read(length))
+                    cfg = load_config(paths)
+                    rep = importer.upgrade_source(paths, cfg, payload["url"])
+                    upstream.cached_head(paths, payload["url"], force=True)  # 刷新缓存
+                    self._send(200, json.dumps(
+                        {"ok": True, "installed": len(rep.installed),
+                         "dropped": rep.dropped, "packs": sorted(rep.packs)},
+                        ensure_ascii=False), "application/json; charset=utf-8")
+                except (importer.ImporterError, KeyError, ValueError) as e:
+                    self._send(400, json.dumps({"error": str(e)}, ensure_ascii=False),
+                               "application/json; charset=utf-8")
+                return
             if self.path != "/api/save":
                 self._send(404, json.dumps({"error": "not found"}), "application/json")
                 return
