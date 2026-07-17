@@ -185,6 +185,8 @@ def apply_payload(paths: Paths, cfg: Config, payload: dict) -> None:
     for name, body in tools_in.items():
         if name in cfg.tools:
             switcher.use(paths, cfg, name, list(body.get("groups", [])))
+    from . import backup
+    backup.autosync(paths, "panel 保存并应用")
 
 
 _HTML = Path(__file__).parent / "panel.html"

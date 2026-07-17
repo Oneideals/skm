@@ -32,6 +32,8 @@ def save_state(paths: Paths, state: dict[str, ToolState]) -> None:
     paths.ensure()
     paths.state.write_text(
         json.dumps(raw, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    from . import backup
+    backup.mark_dirty()
 
 
 def backup(paths: Paths, tool: str, ts: ToolState) -> Path:

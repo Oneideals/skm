@@ -263,6 +263,27 @@ def _cmd_sync_boundary(paths: Paths, cfg: Config, args) -> int:
     return 0
 
 
+def _cmd_backup(paths: Paths, cfg: Config, args) -> int:
+    from . import backup as _backup
+    if args.backup_cmd == "init":
+        _backup.init_repo(paths, args.url)
+        print(f"✓ 已初始化并首推到 {args.url}(建议私有仓)")
+        return 0
+    print(_backup.backup_now(paths))
+    return 0
+
+
+def _cmd_restore(paths: Paths, cfg: Config, args) -> int:
+    from . import backup as _backup
+    rep = _backup.restore(paths, args.url, force=args.force)
+    print(f"✓ 已恢复;重链工具: {', '.join(rep['tools']) or '(无)'}")
+    if rep["skipped"]:
+        print(f"  跳过(工具路径不存在): {', '.join(rep['skipped'])}")
+    if rep["safety"]:
+        print(f"  原 ~/.skm 快照: {rep['safety']}")
+    return 0
+
+
 def _cmd_panel(paths: Paths, cfg: Config, args) -> int:
     _panel.serve(paths, port=args.port, open_browser=not args.no_open)
     return 0
@@ -338,6 +359,19 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--apply", action="store_true", help="执行(默认仅预览)")
     p.set_defaults(fn=_cmd_sync_boundary)
 
+    p = sub.add_parser("backup", help="备份到 GitHub(无子命令=立即推送)")
+    bsub = p.add_subparsers(dest="backup_cmd")
+    p.set_defaults(fn=_cmd_backup, backup_cmd=None)
+    bi = bsub.add_parser("init", help="git 化 ~/.skm 并关联远端(建议私有仓)")
+    bi.add_argument("url")
+    bi.set_defaults(fn=_cmd_backup, backup_cmd="init")
+
+    p = sub.add_parser("restore", help="从 GitHub 恢复 ~/.skm 并重算各工具软链")
+    p.add_argument("url")
+    p.add_argument("--force", action="store_true",
+                   help="覆盖已存在的 ~/.skm(先出安全快照)")
+    p.set_defaults(fn=_cmd_restore)
+
     p = sub.add_parser("panel", help="打开可视化配置面板")
     p.add_argument("--port", type=int, default=8787)
     p.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
@@ -348,10 +382,16 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     paths = Paths.from_env()
+    from . import backup as _backup
     try:
         cfg = load_config(paths)
-        return args.fn(paths, cfg, args)
-    except (ConfigError, SwitchError, importer.ImporterError) as e:
+        rc = args.fn(paths, cfg, args)
+        if rc == 0:
+            _backup.autosync(paths, " ".join(argv if argv is not None
+                                             else sys.argv[1:]))
+        return rc
+    except (ConfigError, SwitchError, importer.ImporterError,
+            _backup.BackupError) as e:
         print(f"错误: {e}", file=sys.stderr)
         return 1
 

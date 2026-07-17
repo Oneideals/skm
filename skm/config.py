@@ -155,6 +155,8 @@ def save_config(paths: Paths, cfg: Config) -> None:
         lines.append(f"skills = {_toml_list(sorted(g.skills))}")
     paths.config.parent.mkdir(parents=True, exist_ok=True)
     paths.config.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    from . import backup
+    backup.mark_dirty()
 
 
 def resolve_for_tool(cfg: Config, tool: str, groups: list[str]) -> set[str]:
