@@ -58,6 +58,8 @@
 - 🧩 **成组启停**:按分组整组启用/禁用,不用的分组不占上下文。
 - 🖱 **可视化面板**:`skm panel` 打开浏览器,拖拽把 skill 组织进分组、给每个工具勾选分组,保存即应用。
 - 📦 **导入集合**:`skm import <git-url>` 一键导入 GitHub 上的 skill 仓库为一个分组。
+- 🔄 **上游更新**:`skm outdated` 自动检查(只读、带缓存)各 pack 的上游是否更新,面板上一键应用;应用永远手动,不会静默改变 agent 行为。
+- ☁️ **GitHub 备份**:`skm backup init` 后每次配置变更自动提交并异步推送到你的私有仓;换机器 `skm restore` 一键恢复并重建所有软链。
 - 🛡 **安全**:删除软链接需三重校验,你手工放的目录、别的工具建的链接永不被误删;每次切换自动备份,可一键回滚。
 - 🪶 **零运行时依赖**:纯 Python 标准库(需 Python ≥ 3.11)。
 
@@ -123,7 +125,14 @@ skm import <url> [--split-by-dir] [--name N]
                                导入 git 仓库为分组;--split-by-dir 按子目录拆成多个分组
 skm pack create <name> --skills a,b,c
                                手挑若干 skill 组成一个集合(pack)
-skm upgrade <pack>             按来源 URL 重新拉取更新一个 pack
+skm upgrade <pack>             按来源 URL 重新拉取更新一个 pack(同源 pack 一起刷新)
+skm outdated [--force]         检查各 pack 上游是否有更新(带 24h 缓存)
+
+# —— 备份 / 恢复 ——
+skm backup init <git-url>      把 ~/.skm 关联到 GitHub 私有仓并首次备份
+skm backup                     立即提交并推送当前配置到 GitHub
+skm restore <git-url> [--force]
+                               从 GitHub 恢复 ~/.skm 并按 state 重算各工具软链
 
 # —— 查看 / 体检 ——
 skm list                       各工具三层现状(通用 N + 专用 M + 分组[...])
@@ -222,6 +231,8 @@ owned_sources = [
 
 **安全保证。** 删除一条软链接需**三重校验**同时满足:① 在 skm 的状态记录里 ② 确实是软链接 ③ 链接目标位于 `~/.skm/skills/` 下。任一不满足就跳过并警告——你手工放进 `skills/` 的真实目录、别的工具建的软链接,永远不会被 skm 删除。每次切换前自动把当前状态快照写入 `~/.skm/backups/`,`skm rollback` 可逆。
 
+**上游更新与备份。** `skm import` 会记录来源仓库与安装时的 commit;`skm outdated` 用 `git ls-remote`(只读、不 clone、结果缓存 24 小时)对比远端 HEAD,判断各 pack 是否有更新,面板上过期的 pack 会显示 ⬆ 更新按钮——**应用永远由你手动触发**,避免上游改动静默改变 agent 行为。`skm backup init <私有仓>` 把整个 `~/.skm`(中央仓 + 配置 + 状态)变成 git 仓关联到你的 GitHub;此后每次配置变更自动提交并**异步推送**(失败不打断,下次补推);换机器时 `skm restore <私有仓>` 克隆回来并按 `state.json` 重建每个工具的软链接。
+
 **目录布局:**
 
 ```
@@ -229,7 +240,7 @@ owned_sources = [
 ├── skills/        中央仓:所有 skill 的真身(扁平,一层)
 ├── config.toml    声明式配置:universal / tools / packs / groups
 ├── state.json     运行时状态:每个工具当前勾选的分组 + skm 建的软链接清单
-└── backups/       每次切换前的快照,供 rollback
+└── backups/       每次切换前的快照,供 rollback(不进 GitHub 备份)
 ```
 
 ---
