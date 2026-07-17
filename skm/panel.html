@@ -45,6 +45,8 @@
     border-radius:20px; padding:0 8px; }
   .cbody { padding:2px 6px 6px 22px; }
   .skill.member { padding:5px 8px; }
+  .upbadge { color:#e0b341; font-size:12px; cursor:default; }
+  .upbtn { padding:0 8px; font-size:12px; border-color:var(--gold); color:var(--gold); }
   .sec { margin-bottom:20px; }
   .bucket { background:var(--panel); border:1px solid var(--line); border-radius:10px;
     padding:11px 12px; margin-bottom:10px; }
@@ -108,7 +110,7 @@
 </main>
 <div id="toast"></div>
 <script>
-let S = null, model = null;
+let S = null, model = null, OUT = {};
 const collapsed = new Set();
 
 function matches(s, q) {
@@ -137,6 +139,7 @@ async function load() {
     model.tools[t] = { skills:[...tc.skills], groups:[...tc.groups] };
   document.getElementById("hint").textContent = `中央仓 ${S.skills.length} 个 skill`;
   renderPool(); renderAll();
+  fetch("/api/outdated").then(r=>r.json()).then(o=>{ OUT=o; renderPool(); }).catch(()=>{});
 }
 
 function renderPool() {
@@ -148,7 +151,8 @@ function renderPool() {
     const head0 = isPack ? {name: col.name, description: ""} : col.root;
     const key = isPack ? "pack:" + col.name : col.root.name;
     const memHits = col.members.filter(m => matches(m, q));
-    if (q && !matches(head0, q) && !memHits.length) continue;  // 整块无命中 → 隐藏
+    const rootHit = isPack && col.root && matches(col.root, q);
+    if (q && !matches(head0, q) && !rootHit && !memHits.length) continue;  // 整块无命中 → 隐藏
     const shown = q ? memHits : col.members;
     const open = q ? true : !collapsed.has(key);               // 搜索强制展开
     const box = document.createElement("div"); box.className = "collection";
@@ -167,10 +171,36 @@ function renderPool() {
     const desc = document.createElement("span"); desc.className = "cdesc";
     desc.textContent = head0.description || "";
     const cnt = document.createElement("span"); cnt.className = "ccount";
-    cnt.textContent = col.members.length;
-    head.append(tog, nm, desc, cnt); box.appendChild(head);
+    cnt.textContent = col.members.length + (isPack && col.root ? 1 : 0);
+    head.append(tog, nm, desc, cnt);
+    let up = null;
+    if (isPack) {
+      for (const [u, r] of Object.entries(OUT))
+        if (r.packs.includes(col.name) && r.status === "outdated") up = u;
+    }
+    if (up) {
+      const btn = document.createElement("button");
+      btn.className = "mini upbtn"; btn.textContent = "⬆ 更新";
+      btn.title = "同 source 的 pack 会一起刷新";
+      btn.addEventListener("click", async e => {
+        e.stopPropagation();
+        btn.disabled = true; btn.textContent = "更新中…";
+        const r = await fetch("/api/upgrade", {method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({url: up})});
+        if (r.ok) {
+          const d = await r.json();
+          toast(`已更新 ${d.installed} 个 skill(${d.packs.join(", ")})`, true);
+          OUT = {}; load();
+        } else { toast("更新失败:" + (await r.json()).error, false); btn.disabled = false; }
+      });
+      head.append(btn);
+    }
+    box.appendChild(head);
     if (open) {
       const body = document.createElement("div"); body.className = "cbody";
+      if (isPack && col.root && (!q || matches(col.root, q)))
+        body.appendChild(skillRow(col.root, false));
       for (const m of shown) body.appendChild(skillRow(m, true));
       box.appendChild(body);
     }
