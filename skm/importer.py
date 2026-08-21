@@ -8,6 +8,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import upstream
 from .config import Config, Pack, save_config
 from .paths import Paths
 
@@ -133,6 +134,9 @@ def upgrade_source(paths: Paths, cfg: Config, url: str) -> ImportReport:
                                 commit=rep.commit, base=base, split=split)
         rep.dropped += [f"{pname}/{s}" for s in sorted(set(old) - set(fresh))]
     save_config(paths, cfg)
+    # 刚克隆到的就是当下的远端 head,记进缓存;否则 24h TTL 内 outdated 会拿
+    # 旧缓存跟刚写的新 commit 比,假报一个并不存在的落后。
+    upstream.record_head(paths, url, rep.commit)
     return rep
 
 

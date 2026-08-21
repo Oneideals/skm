@@ -41,6 +41,25 @@ def cache_snapshot(paths: Paths) -> dict[str, str | None]:
     return {u: e.get("head") for u, e in _load_cache(paths).items()}
 
 
+def _save_cache(paths: Paths, cache: dict) -> None:
+    paths.ensure()
+    _cache_path(paths).write_text(
+        json.dumps(cache, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def record_head(paths: Paths, url: str, head: str | None) -> None:
+    """记下刚亲手确认的远端 head(upgrade 克隆完调用)。
+
+    不记的话,升级把 config 推到新 commit、缓存却停在旧值,24h TTL 内
+    outdated 会拿旧缓存跟新 config 比,报一个并不存在的落后。
+    """
+    if not head:
+        return
+    cache = _load_cache(paths)
+    cache[url] = {"head": head, "checked_at": time.time()}
+    _save_cache(paths, cache)
+
+
 def cached_head(paths: Paths, url: str, force: bool = False) -> str | None:
     """带缓存的远端 HEAD;force 绕过 TTL。失败结果也记录(防重复慢查)。"""
     cache = _load_cache(paths)
@@ -49,9 +68,7 @@ def cached_head(paths: Paths, url: str, force: bool = False) -> str | None:
         return ent.get("head")
     head = remote_head(url)
     cache[url] = {"head": head, "checked_at": time.time()}
-    paths.ensure()
-    _cache_path(paths).write_text(
-        json.dumps(cache, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _save_cache(paths, cache)
     return head
 
 
