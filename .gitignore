@@ -10,3 +10,4 @@ __pycache__/
 # legacy names (compat)
 .agent-handoff.md
 .agent-handoff/
+.workbuddy/
