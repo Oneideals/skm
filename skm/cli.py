@@ -113,6 +113,9 @@ def _cmd_import(paths: Paths, cfg: Config, args) -> int:
     print(f"安装 {len(rep.installed)},跳过(已存在) {len(rep.skipped)}")
     for pname, skills in sorted(rep.packs.items()):
         print(f"pack {pname}: {', '.join(skills)}")
+    if rep.duplicates:
+        print(f"  ⚠ 同名目录被折叠(仅保留一份): {', '.join(rep.duplicates)}",
+              file=sys.stderr)
     return 0
 
 
@@ -138,6 +141,13 @@ def _cmd_upgrade(paths: Paths, cfg: Config, args) -> int:
         print(f"  pack {pname}: {len(skills)} 个")
     if rep.dropped:
         print(f"  从 pack 摘除(真身保留): {', '.join(rep.dropped)}")
+    if rep.duplicates:
+        print(f"  ⚠ 同名目录被折叠(仅保留一份): {', '.join(rep.duplicates)}",
+              file=sys.stderr)
+    if rep.unmatched:
+        print(f"  ⚠ 以下存量 pack 名与推断的 base 对不上,已保留原名单未改动"
+              f"(如需升级请用 skm import 重新导入): {', '.join(rep.unmatched)}",
+              file=sys.stderr)
     return 0
 
 

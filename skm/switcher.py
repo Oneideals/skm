@@ -77,8 +77,16 @@ def use(paths: Paths, cfg: Config, tool: str, groups: list[str]) -> Report:
     return _apply(paths, cfg, state, tool, list(groups), target)
 
 
+def _check_group(cfg: Config, group: str) -> None:
+    """校验单个分组名存在;enable/disable 都过这一关,避免 disable 拼错时静默 no-op。"""
+    if group not in cfg.groups:
+        known = ", ".join(sorted(cfg.groups)) or "(无)"
+        raise SwitchError(f"分组不存在: {group}。可用: {known}")
+
+
 def enable(paths: Paths, cfg: Config, tool: str, group: str) -> Report:
     """给某工具增开一个分组(叠加到已勾选的)。"""
+    _check_group(cfg, group)
     state = load_state(paths)
     cur = state.get(tool, ToolState()).groups
     return use(paths, cfg, tool, sorted(set(cur) | {group}))
@@ -86,6 +94,7 @@ def enable(paths: Paths, cfg: Config, tool: str, group: str) -> Report:
 
 def disable(paths: Paths, cfg: Config, tool: str, group: str) -> Report:
     """给某工具关掉一个分组。"""
+    _check_group(cfg, group)
     state = load_state(paths)
     cur = state.get(tool, ToolState()).groups
     return use(paths, cfg, tool, sorted(set(cur) - {group}))

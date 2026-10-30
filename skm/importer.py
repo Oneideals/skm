@@ -25,7 +25,9 @@ class ImportReport:
     skipped: list[str] = field(default_factory=list)
     packs: dict[str, list[str]] = field(default_factory=dict)
     commit: str | None = None
-    dropped: list[str] = field(default_factory=list)   # 升级时从 pack 摘除的
+    dropped: list[str] = field(default_factory=list)    # 升级时从 pack 摘除的
+    duplicates: list[str] = field(default_factory=list)  # 拍平后同名被折叠的 skill 名
+    unmatched: list[str] = field(default_factory=list)   # 升级时 base 对不上的存量 pack
 
 
 def find_skill_dirs(root: Path) -> list[Path]:
@@ -72,6 +74,25 @@ def _group_key(repo_root: Path, skill_dir: Path, base: str) -> str:
     return f"{base}-{_slug(parent.name)}"
 
 
+def _common_word_prefix(names: list[str]) -> str:
+    """按 '-' 词边界取公共前缀,用于无 base 记录的存量多 pack 推断 base。
+
+    os.path.commonprefix 是字符级:'coding-skills'/'coding-style' 会被截成
+    'coding-s'(词中间截断),据此重建的 pack 名与原 pack 名对不上。按整词切
+    分可得到干净的 'coding'。无整词公共前缀时回退到字典序首个 pack 名。
+    """
+    if len(names) == 1:
+        return names[0]
+    parts = [n.split("-") for n in sorted(names)]
+    common: list[str] = []
+    for segs in zip(*parts):
+        if all(s == segs[0] for s in segs):
+            common.append(segs[0])
+        else:
+            break
+    return "-".join(common) if common else sorted(names)[0]
+
+
 def import_repo(paths: Paths, cfg: Config, url: str, name: str | None = None,
                 split_by_dir: bool = False, force: bool = False) -> ImportReport:
     base = name or _repo_slug(url)
@@ -90,8 +111,14 @@ def import_repo(paths: Paths, cfg: Config, url: str, name: str | None = None,
         dirs = find_skill_dirs(root)
         if not dirs:
             raise ImporterError("仓库里没找到任何 SKILL.md,不建 pack")
+        seen: set[str] = set()
         for d in dirs:
             skill_name = base if d == root else d.name
+            # 拍平导入按 basename 落目录;不同路径下的同名 skill 会静默折叠成
+            # 一份(后一个被 skipped)。显式记录,避免"看起来装了其实丢了一个"。
+            if skill_name in seen and skill_name not in rep.duplicates:
+                rep.duplicates.append(skill_name)
+            seen.add(skill_name)
             status = install_local(paths, d, name=skill_name, force=force)
             bucket = rep.installed if status == "installed" else rep.skipped
             bucket.append(skill_name)
@@ -113,23 +140,34 @@ def upgrade_source(paths: Paths, cfg: Config, url: str) -> ImportReport:
     if not group:
         raise ImporterError(f"没有 source 为 {url} 的 pack")
     anchor = next((p for p in group.values() if p.base), None)
+    inferred = False
     if anchor:
         base, split = anchor.base, anchor.split
     elif len(group) == 1:
         base, split = next(iter(group)), False        # 整仓单 pack 导入的存量
     else:
         # 存量多 pack 同源(二期前的 --split-by-dir 产物):推断为 split,
-        # base = pack 名公共前缀(matt-engineering/matt-misc… → matt)
-        import os.path
-        common = os.path.commonprefix(sorted(group)).rstrip("-")
-        base, split = (common or sorted(group)[0]), True
+        # base = pack 名的整词公共前缀(matt-engineering/matt-misc… → matt)。
+        # 用字符级 commonprefix 会把 coding-skills/coding-style 截成 coding-s,
+        # 导致下面 pack 名对不上、名单被静默清空,故改按 '-' 词边界切分。
+        base, split = _common_word_prefix(sorted(group)), True
+        inferred = True
     old_lists = {n: list(p.skills) for n, p in group.items()}
 
     rep = import_repo(paths, cfg, url, name=base, split_by_dir=split, force=True)
 
-    # fresh 名单:覆盖 import_repo 的 old∪new 合并;上游消失的从 pack 摘除
+    # fresh 名单:覆盖 import_repo 的 old∪new 合并;上游消失的从 pack 摘除。
+    # 只有在 base 是"推断"出来的不确定路径上,rep.packs 缺 key 才可能是推断
+    # 错位(会把用户原名单静默清空)——此时保留原样并告警。base 明确时(anchor/
+    # 单 pack),缺 key 就是合法的"上游删空",必须清空,不能当作推断失败。
     for pname, old in old_lists.items():
-        fresh = rep.packs.get(pname, [])
+        if pname not in rep.packs:
+            if inferred:
+                rep.unmatched.append(pname)
+                continue
+            fresh = []
+        else:
+            fresh = rep.packs[pname]
         cfg.packs[pname] = Pack(skills=sorted(fresh), source=url,
                                 commit=rep.commit, base=base, split=split)
         rep.dropped += [f"{pname}/{s}" for s in sorted(set(old) - set(fresh))]

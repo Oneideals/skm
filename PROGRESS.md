@@ -1,12 +1,18 @@
 # 🚀 Project Progress & Agent Handover — skm
 
-> **Last Updated:** 2026-09-02T08:11:10Z (read-only projection)
-> **Git State:** `dirty` | **Branch:** `main` | **Events Count:** 18
+> **Last Updated:** 2026-10-30T04:40:00Z (read-only projection, manually merged)
+> **Git State:** `clean` | **Branch:** `main` | **Events Count:** 18 (+2 local, see note)
+
+> **⚠️ Note:** `.agent-baton/events.jsonl` is gitignored, so it does not survive a
+> fresh clone / workspace rebuild. After the 2026-10-30 rebuild only 2 local events
+> remained; the milestone list below is preserved verbatim from the previous
+> projection at `25569d0` and merged by hand instead of being overwritten.
 
 ---
 
 ## 🎯 Recent Milestones & Completed Tasks ([DONE])
 
+- [DONE] (claude, 2026-10-30) **karpathy 原则 + superpowers 流程全量 review 与修复**:修 4 个真实缺陷(details in commit body);新增 `pytest.ini` 与 4 条 TDD 回归测试,104 → 108 全绿
 - [DONE] `ci-restore-clone` — CI 红:restore 对 HEAD≠main 的远端空检出;e553a55 热修(clone -b main 优先+回退+fixture 复现),已推 main
 - [DONE] `skm-protocol-commit` — Committed protocol migration on main
 - [DONE] (claude, 2026-08-26) Imported Leonxlnx/taste-skill (13 skills) into SKM
@@ -17,7 +23,11 @@
 
 ## 📋 Open Issues & Backlog ([TODO])
 
-_No open issues._
+- [TODO] `cli.main` 异常捕获不完整:未覆盖 `PanelError` / `OSError` / `subprocess` 异常,极端运维场景(工具目录不可写、面板错误)会直接崩栈且可能半途切换。
+- [TODO] `import_repo` 同名 skill 目录目前只告警(`rep.duplicates`),未做改名/去重策略,拍平导入仍会丢失同名项。
+- [TODO] `panel` 仅监听本地且无鉴权,同一台机器上的其他进程可调用 `apply_payload`。
+- [TODO] `sync-boundary --apply` 的删除动作不可逆,建议加 dry-run 预览或回收站。
+- [TODO] 真实 `~/.skm` 存在 28 条 doctor 问题(全为 `lark-*` 工具血统残留),可用 `skm sync-boundary --apply` 收敛,但需先补上方不可逆防护。
 
 ## 🔄 Active Leases & In-Progress Work
 
@@ -25,11 +35,12 @@ _No active leases._
 
 ## 📝 Working Tree Changes
 
-- `??` `.workbuddy/`
+_None (all changes committed)._
 
 ## 💡 Handoff Instructions for Next Agent
 
 1. Before making changes, register your task: `baton start --project . --tool <tool-name> --summary "<task-description>"`
 2. Review the `[TODO]` items above and implement the required features/fixes.
-3. Upon completion, close the lease and sync to GitHub: `baton finish --project . --tool <tool-name> --session <id> --summary "<what-was-done>" --push`
-
+3. Run the suite the way CI does: `python -m pytest -q` (bare `pytest` also works since `pytest.ini` sets `pythonpath = .`).
+4. Upon completion, close the lease and sync to GitHub: `baton finish --project . --tool <tool-name> --session <id> --summary "<what-was-done>"`
+5. ⚠️ `baton finish` re-projects this file from local events — since `.agent-baton/` is gitignored and may be empty after a rebuild, **check `git diff PROGRESS.md` before committing** and merge the milestone list back if it got truncated.
